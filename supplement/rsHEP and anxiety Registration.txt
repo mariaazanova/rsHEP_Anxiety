@@ -1,0 +1,397 @@
+﻿Resting-state heartbeat-evoked potential as a trait in anxiety
+ 
+Maria Azanova1,2*, Tim Paul Steinfath1,3*, Nikolai Kapralov1,3, Ulrich Hegerl 4, Tilman Hensch5,6,7, Christian Sanders6,7, Vadim V. Nikulin1**, Arno Villringer1,7,8,9**
+1 Department of Neurology, Max Planck Institute for Human Cognitive and Brain Sciences,  Leipzig, Germany
+2  Max Planck School of Cognition, Leipzig, Germany
+3 International Max Planck Research School NeuroCom, Leipzig, Germany
+4 Department of Psychiatry, Psychosomatics and Psychotherapy, Goethe University Frankfurt, Frankfurt, Germany
+5 Department of Psychology, IU International University of Applied Sciences, Erfurt, Germany
+6 Department fof Psychiatry and Psychotherapy, University of Leipzig Medical Center, Leipzig, Germany
+7 LIFE – Leipzig Research Center for Civilization Diseases, University of Leipzig, Leipzig, Germany
+8 Department of Cognitive Neurology, University Hospital Leipzig, Leipzig, Germany
+9 MindBrainBody Institute, Berlin School of Mind and Brain, Humboldt University Berlin, Berlin, Germany
+
+
+* Contributed equally. ** Shared senior authorship. Corresponding authors: Maria Azanova (azanova@cbs.mpg.de); Tim Paul Steinfath (steinfath@cbs.mpg.de).
+
+
+Abstract
+Anxiety disorders are characterized by alterations of interoception, making affected individuals more sensitive to bodily sensations. Given the difficulty of assessing interoception based on subjective reports, clinical practice could benefit from an objective and quantifiable biomarker. In this registered report, we aim to test whether heartbeat-evoked potentials, known markers of cardiac interoception, are positively associated with anxiety scores in a large, pre-collected sample of 3462 participants. To this end, we will use 20-minute resting-state electroencephalography, electrocardiography recordings, and the Generalized Anxiety Disorder questionnaire. To inform methodological approaches in the nascent HEP field, we register a multiverse of analysis pipelines that differ in baseline correction, filtering, and independent component analysis. We will use a permutation approach and mixed linear models to test if the association between heartbeat-evoked potential and anxiety is robust to the choice of a preprocessing pipeline.
+Introduction
+Anxiety disorders are the most common mental disorders, affecting an estimated 4% of the global population, causing significant distress and impairment in their daily lives (Michael et al., 2007; World Health Organization, n.d.). One of the critical components in the development of anxiety disorders is the interoceptive system, which is responsible for processing and integrating internal bodily sensations (Berntson & Khalsa, 2021; Craig, 2002). Interoceptive dysfunction, characterized by increased sensitivity to and misinterpretation of internal bodily signals, is considered a crucial element in the pathophysiology of anxiety disorders (Domschke et al., 2010; Garfinkel et al., 2016; Paulus & Stein, 2006, 2010; Tumati et al., 2021). Indeed, studies show that anxiety patients demonstrate greater awareness of various bodily functions (Domschke et al., 2010), including widely studied increased sensitivity in heartbeat perception[a] (Does et al., 2000; Ehlers et al., 1995; Ehlers & Breuer, 1992; Pollatos et al., 2009). However, recent reviews and meta-analyses challenge this view by showing that the association between cardiac interoceptive accuracy and anxiety symptoms is not robust (Adams et al., 2022; Desmedt et al., 2023). Since the etiology of anxiety disorders strongly suggests a dysfunctional interoceptive system as a critical component, the discrepancy between the theoretical model and observed associations might be explained by the validity of tools used to assess cardiac interoception (Adams et al., 2022; Murphy et al., 2018). Consequently, there is a need for new methods that allow for a more objective assessment of potential alterations in the interoceptive system associated with anxiety disorders.
+One potential candidate is the heartbeat-evoked potential (HEP), which is an event-related potential (ERP) time-locked to the electrocardiogram (ECG) and reflects cortical processing of cardiac signals (Schandry et al., 1986). HEP is a valuable tool for investigating the neural processing of interoceptive information and its relation to emotional and cognitive processes (Park & Blanke, 2019). For instance, studies have demonstrated that HEP is modulated by attention, emotional arousal, and individual differences in interoceptive accuracy (Fukushima et al., 2011; Mai et al., 2018; Petzschner et al., 2019). Moreover, research shows that the amplitude of HEP reflects if one’s attention focus is directed more toward external stimuli or internal bodily signals (Al et al., 2020; Petzschner et al., 2019). Therefore, one could think of the HEP as a neural marker for interoception (Azzalini et al., 2019; Park & Blanke, 2019) sensitive to various interoceptive manipulations (M.-P. Coll et al., 2020). In line with this assumption, recent studies show a relationship between anxiety and condition-dependent changes in HEP (Judah et al., 2018; Pang et al., 2019; Verdonk et al., 2023). These alterations may signify disruptions in the neural processing of cardiac signals, potentially contributing to the onset and persistence of anxiety symptoms. However, while most HEP studies focus on state-related changes in this neural response during tasks and between conditions (Azzalini et al., 2019), it is currently theorized that trait anxiety is inherently related to aberrant interoception (Stern, 2014). Therefore, along with individual variation in anxiety scores, we expect to see individual differences in HEP when considering resting-state, task-free, recordings. A prominent advantage of studying resting-state recordings is that they are not prone to task-related artifacts leading to contamination of the HEP signal (Steinfath et al., in prep). Some neuronal biomarkers, such as evoked responses or oscillatory power, have already been studied in the context of trait anxiety (Clark et al., 2009; Vidaurre et al., 2023). However, resting HEP could be a more anxiety-specific marker as compared to oscillatory power because of its association with interoception. Hence, it could further enrich our knowledge of the underlying mechanisms of anxiety conditions. If - as we hypothesize - resting HEP amplitudes are related to an established trait marker of anxiety, then HEP itself can serve as a trait marker, which is a stable characteristic linked to the vulnerability of developing anxiety disorder, as opposed to a state marker, which is a relatively temporary change related to the current anxious state.
+In line with previously proposed models of anxiety (Domschke et al., 2010; Garfinkel et al., 2016; Paulus & Stein, 2006, 2010; Tumati et al., 2021), our first hypothesis is that larger resting HEP amplitudes (more negative for negative deflections, more positive for positive deflections) are positively associated with anxiety symptoms (Hypothesis 1a-d, Table 1). We plan to test this premise in a large population sample of participants with varying degrees of trait anxiety as measured by the Generalized Anxiety Disorder questionnaire (GAD-7, Spitzer et al., 2006). In addition, we will compare HEP amplitudes between subjects with high and low anxiety scores (Hypothesis 1bd, Table 1). This allows us to address the possibility that HEP does not generally scale with anxiety symptoms but increases only in a clinical anxiety group (Adams et al., 2022; Domschke et al., 2010). Furthermore, we will test to what extent HEP-anxiety association is mediated by confounding factors such as depression score, diabetes, body mass index (BMI), blood pressure, heart rate (HR), heart-rate variability (HRV), alpha power, age, and sex.
+The field of HEP research faces challenges relating to a variety of methodological approaches to recording, processing, and analyzing this neural response, which leads to issues with replicability, reproducibility, and interpretation of results (Azzalini et al., 2019; Park & Blanke, 2019). We have confirmed a high degree of methodological variability in the field with a systematic review of methodologies that have so far been used to study HEP (cite preprint). Since no standardized analysis pipeline exists for investigating HEP and the influence of the various data processing decisions is unclear, we aim to use a multiverse analysis approach (Harder, 2020). The multiverse analysis involves a systematic exploration of a variety of possible analysis scenarios to assess the robustness of research findings and mitigate the risk of false positive results (Steegen et al., 2016; Clayson et al., 2021; Kołodziej et al., 2021; Schubert et al., 2023). By focusing on this aspect, we aim to unravel the genuine and robust physiological associations of HEP with anxiety symptoms, as opposed to variability in results driven by analytical decisions. Some studies have already underscored the critical role of HEP analysis choices such as reference electrodes, control for cardiac field artifacts, baseline correction, and regions of interest (ROI) in space and time (Candia-Rivera et al., 2021; Azzalini et al., 2019; M.-P. Coll et al., 2020; Park & Blanke, 2019). Nevertheless, the influence various analysis choices have on HEP results has not been explicitly assessed so far. Based on a systematic literature review, we selected data processing steps that are widely used and could potentially affect the HEP-anxiety association (Figure 1a). Hence, our second hypothesis is that analytical decisions such as filter settings, baseline correction, CFA removal strategy, and choice of ROI have effects on final results (Hypotheses 2ab, Table 1).
+Given that the study of altered interoception in clinical populations is a promising prospective field, we expect clinical practice to benefit from the conclusions regarding the trait properties of HEP and clear methodological recommendations on how to compute them. 
+Methods
+Ethics information
+The data for this study were collected as part of the LIFE-Adult study conducted by the Leipzig Research Center for Civilization Diseases at Leipzig University (Loeffler et al., 2015), which was approved by the University of Leipzig's Medical Faculty Ethics Committee (ethics number: 263-2009-14122009). The participants were selected randomly from the resident registration office and gave their written informed consent. They received 20€ per visit as a monetary remuneration for their involvement in the study. 
+Design
+Questionnaires 
+As described previously (Loeffler et al., 2015), participants filled out self-administered paper-based questionnaires on the first assessment day. They also underwent physical and medical examinations, personal interviews, and psychometric tests on the same day. In our analyses, we will use the Generalized Anxiety Disorder questionnaire (GAD-7, Spitzer et al., 2006) to quantify trait anxiety. GAD-7 is a 7-item questionnaire to detect anxiety according to DSM-V. The scores range from 0 (no anxiety) to 21 (severe anxiety). GAD-7 is suitable for our study because it is used in clinical practice for diagnostic purposes (Löwe et al., 2008), shows a high test-retest reliability of 0.83-0.87 (Bischoff et al., 2020; Sousa et al., 2015; Spitzer et al., 2006), and has high internal consistency (Löwe et al., 2008; Spitzer et al., 2006). A recent study on longitudinal anxiety changes in the LIFE dataset found that the GAD-7 is a reliable instrument with a high measurement invariance appropriate for examining anxiety in the general population (Hinz et al., 2023). Notably, the study reported a mean GAD-7 score of 3.28 and standard deviation of 3.16, indicating a large variability of anxiety scores in a sample overlapping with our study's sample. To control for the effects of depressive symptoms on HEP-anxiety association, we will use the Inventory of Depressive Symptoms – Self Rating (IDS, Rush et al., 1986) collected on the same day. 
+Resting-State recordings
+Resting-state simultaneous EEG and ECG were recorded on another assessment day. The time interval between the questionnaires and electrophysiological recording in the sample varies between 0.14 and 137.9 weeks (Jawinski et al., 2017). 20-minute resting EEG data were collected from 31 Ag/AgCl electrodes following the 10-20 extended localization system using a QuickAmp amplifier (Brain Products GmbH, Gilching, Germany). The recording took place in a soundproof and electrically shielded booth and was done with eyes closed. The recording also included electrooculogram (vertical and horizontal, above and beneath the right eye) and electrocardiogram (ECG, one bipolar electrode attached to the right and left forearm) data. The electrodes were referenced to a common average while the impedance was kept below 10kΩ. AFz electrode served as a ground electrode. The data was recorded at a sampling rate of 1000 Hz and low-pass filtered at 280 Hz. More information can be found in a paper by Jawinski et al., 2017.
+Sampling plan
+EEG data was obtained from 3462 subjects aged between 40 and 80 as part of the population-based LIFE-study (n=10000) representing inhabitants of the city of Leipzig. 
+It has been suggested that the association between anxiety and cardiac interoception is more pronounced in clinical populations (Adams et al., 2022; Domschke et al., 2010). Hence, we also plan to compare moderate anxiety subjects (GAD-7 score from 10 to 21) [b]to subjects with no anxiety (GAD-7 score from 0 to 4). These cutoffs are based on studies showing that clinical anxiety subjects have GAD-7 scores of 10 or higher (Spitzer et al., 2006, Löwe et al., 2008). A recent study on the full LIFE dataset found that with this cutoff around 90% of the subjects would have normal anxiety scores (Hinz et al., 2023). We will only perform this analysis if there are at least 25 moderate anxiety subjects in the sample, which is the largest number of anxiety subjects in comparable studies (Judah et al., 2018; Pang et al., 2019; Verdonk et al., 202[c]3). 
+Because we study natural variations of anxiety symptoms in the previously collected population-based dataset, there is no treatment randomization in this study, and data collection and analysis are not performed blind to the conditions of the experiment.
+Exclusion criteria
+We will use a between-subject design to study HEP as a trait marker within a representative population. We will exclude subjects with invalid GAD-7 scores, i.e., all 7 items must be answered. We will exclude participants with heart and brain conditions likely to affect EEG or ECG recordings. Therefore, we will only include subjects that have no history of neurological disorders such as brain hemorrhage, brain tumor, Parkinson's, or Alzheimer's diseases nor have undergone brain surgery. Participants would be excluded if they were taking medications that affect the central nervous system, e.g., opioids, antidepressants, anti-epileptic drugs, sedatives, anxiolytics, and anti-parkinsonian drugs, or if they consumed alcohol on the day of the EEG measurement. We will further exclude participants with heart conditions such as arrhythmia and atrial fibrillation and participants who underwent bypass surgery or have a pacemaker. Furthermore, we will exclude participants with bad ECG recordings. In particular, for a subject to be included, a minimum of  600 R-peaks should be included for analysis, in line with previous studies (M. P. Coll et al., 2021). The number of R-peaks included for analysis will be affected by the number of R-peaks identified, peak-to-peak voltage in an epoch, proximity to other R-peaks, and if some extrasystole heartbeats were identified (for details, see Analysis plan). In addition, we will exclude participants with the number of identified extrasystole heartbeats that is four standard deviations higher than in the overall sample. We will also exclude participants if more than 50% channels are identified as bad (see Analysis plan). To control for confounding effects of vigilance, we will exclude participants who, based on an EEG vigilance measure (VIGALL, Sander et al., 2016), were drowsy for more than 15 out of 20 minutes of the resting-state recording. 
+Power analysis
+We performed simulation-based power estimation for all our hypotheses (Figure 1b). We used MASS (Ripley et al., 2024) and fGarch (Wuertz et al.) R packages to simulate matrices of correlated variables and to produce skewed distributions. A sample of 3000 subjects allows us to achieve 98% power for all hypotheses. For an expected sample of 300 moderate anxiety subjects, we achieve more than 95% power on all statistical tests. See supplementary materials for details of simulations relating to each of the hypotheses. Results are summarized in Table 1. 
+Analysis plan
+EEG data preprocessing
+EEG recordings will be analyzed in MATLAB, using EEGLAB (Delorme & Makeig, 2004) and FieldTrip (Oostenveld et al., 2011) toolboxes. The reference will be kept as the common average, already applied during the recording. The data will be low-pass filtered using a zero-phase, non-causal FIR filter in the pop_eegfiltnew function with a 40[d] Hz cutoff (-6 dB at 45 Hz, filter-order 85) and subsequently downsampled to a sampling frequency of 250 Hz. Channels that include 5 seconds or more of flat line signal or have less than 85% correlation with the reconstructed activity from adjacent channels will be identified using the clean_artifacts EEGLAB plugin (Mullen et al., 2015). These channels will be removed from the data and interpolated using spherical spline interpolation. If more than 50% of the channels are identified as bad, we will exclude the subject from further analyses. 
+ECG analysis
+We will use the HEPLAB toolbox (Perakakis, 2019) to identify R-peak events. We will use CER-S (Vaglio et al., 2022) software to identify abnormal heartbeat events such as extrasystoles or atrial fibrillation. If few extrasystoles are present, they and the heartbeats following them will be removed from the data. However, participants with too many extrasystole heartbeats will be excluded from the analysis (see exclusion criteria). We will compute heart rate (HR) and heart rate variability (HRV) for each subject. HR will be defined as the number of beats per minute. The standard deviation of inter-beat intervals (SDNN) will serve as a measure of heart rate variability (HRV) (Shaffer & Ginsberg, 2017). We will exclude two consecutive heartbeats if the inter-beat interval between them is less than 500 ms to avoid overlap between HEP epochs.
+EEG multiverse analysis
+After the initial preprocessing and cleaning steps of the EEG data, we will perform a multiverse analysis involving several pre-registered pipelines as detailed below (Figure 1a). Between pipelines, preprocessing will differ in three critical steps: high-pass filter cutoff frequency, ICA cleaning of artifacts, and baseline correction. 
+Filtering
+The EEG data will be high-pass filtered using the zero-phase, non-causal FIR filter in the pop_eegfiltnew function from the EEGLAB toolbox. As multiverse options, we will use the two cutoff values, namely, 0.1 (-6 dB at 0.05 Hz, filter-order 8250) and 0.5 Hz (-6 dB at 0.25 Hz, filter-order 1650). These choices were based on our systematic review of previous HEP literature (cite preprint) and recommended filter settings for ERP studies (Luck, 2014; Tanner et al., 2015). After filtering, we will segment the EEG and ECG data into epochs ranging from -200 ms to 800 ms around the R-peak. 
+ICA
+Independent Component Analysis (ICA) will be performed to identify and attenuate noise sources from the data. Since the ICA decomposition is more effective with reduced low-frequency noise (Winkler et al., 2015), a high-pass filter of 1 Hz (-6 dB at 0.5 Hz, filter-order 827)  will be applied to create datasets only used to derive ICA weights. We will apply the extended Infomax ICA algorithm (Lee et al., 1999) after reducing the number of dimensions by Principal Component Analysis (PCA) to the rank of the data.
+As a multiverse choice, we aim to vary the number of removed ICs per individual. First, we will not perform any ICA-based correction. This decision is motivated by a suggestion that it may be better not to ‘overprocess’ the EEG data (Delorme, 2023). Second, we will not remove any components relating to cardiac-field artifacts (CFA), while removing components belonging to other noise categories such as muscle and eye artifacts. To reliably identify different noise components, we will use the automated EEG IC classifier IClabel (Pion-Tonachini et al., 2019). ICs will be removed if they are classified as belonging to any of the following categories with a probability exceeding specified thresholds: ‘muscle’ .9, ‘eye’ .9, ‘line noise’ .9, ‘channel noise’ .9, ‘other’ .9. For the third and fourth multiverse approaches to  ICA, we aim to vary the number of removed CFA-related ICs on top of already chosen noise-related ICs. Heartbeat-related ICs will be identified based on a correlation with an ECG-based template. Per subject, we will compute the average across epochs for each IC and the ECG channel. Following this, the average of each IC will be correlated with the average ECG template. Therefore, for each individual, we would obtain mean and standard deviation (SD) of correlations between ICs and the ECG template. We will remove ICs that show a correlation with ECG higher than the mean correlation by a predetermined number of SD. We will aim at removing, on average, 1.5 heart-related ICs (ideally, 1-2 CFA-related ICs) per individual, which will be considered a ‘non-harsh’ removal of cardiac artifacts corresponding to approximately 5% of all ICs. As another step, we will remove, on average, 3.5 heart-related ICs (ideally, 3-4 CFA-related ICs) per individual, which will be considered a ‘harsh’ removal of CFA corresponding to more than 10% of all ICs. These thresholds are based on the range of removed CFA-related ICs in different studies (cite preprint).
+To determine if an IC is heart-related, a component’s correlation with the ECG should exceed initial thresholds of 3 SD and 1.5 SD above the mean correlation across all components of that subject. If the average number of removed heart-related IC across all subjects is more than 0.2 higher or lower than 1.5 and 3.5 IC, we will iteratively adjust the initial thresholds of 3 SD and 1.5 SD by 0.1 SD until the average number of removed heart-related IC in the sample reaches 1.5 and 3.5 ± 0.2 respectively. The resulting ICA weights will be copied to the original datasets and data back-projected to remove artifacts. 
+Baseline Correction
+EEG epochs with a peak-to-peak amplitude exceeding 200 µV in a minimum of one channel will be removed, excluding channels heavily influenced by eye movements (Fp1, Fp2, F7, and F8). If less than 600 epochs remain, the subject will be excluded from further analyses. As part of the multiverse options, we will perform statistical analyses either after applying a baseline correction based on the -150 to -50 ms time window or without any baseline correction (Verdonk et al., 2021; Delorme, 2023). Finally, we compute the average HEP across epochs for each subject.
+Heartbeat Evoked Potential 
+HEP results concerning the reported locations and timing of effects have been mixed (cite preprint). In our multiverse analyses, we aim to include two commonly used approaches to assess the HEP amplitude modulations. First, we aim to take the average HEP amplitude across a cluster of electrodes (Cz, C3, C4, Fz, F3, F4, FC1, FC2) and time range (200-500 ms post-R-peak). This choice is motivated by observations from two previous studies investigating the HEP-anxiety relationship. Specifically, Judah et al. (2018) found that the average HEP from the Fz electrode between 200-350 ms post R-peak relates to social anxiety. Pang et al. (2019) observed interoceptive modulation of HEPs in healthy controls but not anxiety patients in a frontal electrode cluster between 240-460 ms post-R-peak. In addition, interoceptive performance is related to  HEP amplitudes in this time and electrode cluster (M. P. Coll et al., 2021). Second, we will perform spatiotemporal permutation clustering on regression-based t-values for the association between HEP and anxiety across all electrodes and epoch time points (from -200 to 800 ms locked to R-peak). 
+Alpha power
+In our analysis, we plan to control for alpha power for several reasons. First, we aim to address the possibility that alpha power is mediating the association between HEP and anxiety. Increased power of alpha oscillations indicates altered neural activity in anxiety (Knyazev et al., 2004, 2006; Ward et al., 2018; Vidaurre et al., 2023). Moreover, previous studies have shown that HEP amplitude changes can depend on the level of alpha power (Kritzman et al., 2022; Luft & Bhattacharya, 2015). Secondly, alpha power could potentially control for individual differences in arousal, differences in recording, or physiological characteristics, such as intracranial volume (Candelaria-Cook et al., 2022). 
+For each channel, we define alpha power as the average power in the 8–12 Hz range obtained from power spectral density estimates (PSD) using Welch’s method (4 s Hanning windows with 50% overlap). Based on our multiverse specification, we will compute alpha power for all channels 4 times depending on the level of ICA cleaning (no ICA cleaning, no CFA ICs removed, 1-2 CFA ICs removed, 3-4 CFA ICs) and use respective estimates in further regression analyses. When regressing alpha power against the averaged pre-defined HEP, we average alpha power across the same cluster of electrodes as the one used to compute average HEP (Cz, C3, C4, Fz, F3, F4, FC1, FC2). To assess the influence of alpha power on HEP-anxiety association in significant clusters obtained by permutation based clustering, we use the average alpha power across channels in a cluster (see Table 1).
+Statistical analysis
+
+
+Statistical analysis and visualization will be performed in R, Python and Julia. 
+
+
+To test if HEP and anxiety are associated given pooled evidence from different preprocessing multiverses (all possible combinations of ICA, baseline, and filtering options), we will perform statistical analysis in 2 ways. First, we use mixed linear models to test for association between anxiety and HEP averaged in a predefined spatiotemporal cluster. To obtain p-values for mixed model coefficients, we will use Satterthwaite approximation using the R package lmerTest (Kuznetsova et al., 2020). Second, we run permutation clustering on t-values from mixed linear models for the association between anxiety and HEP at each channel and each time point of HEP. All the mixed models relating to the first research question (Hypotheses 1a-d, Table 1) will contain random subject-level intercepts, and random multiverse-level intercepts and slopes, relating to 16 preprocessing multiverses (Formula 1).
+
+
+Formula 1:
+
+
+
+To test if HEP-anxiety association is affected by any specific pipeline or any specific preprocessing setting, we will perform spatiotemporal permutation clustering on t-values associated with multiverse-related fixed effects (Hypotheses 2ab, Table 1). In particular, for each space-time point of HEP, we will estimate two mixed-linear models, each containing random subject-level intercepts as well as random multiverse-level intercepts and slopes but differing in fixed effect definition. The first model specification will contain a single categorical variable corresponding to 16 preprocessing pipelines. We will use sum coding to estimate if a preprocessing pipeline results in significantly different HEP size and HEP-anxiety estimates compared to the average of all pipelines (Formula 2). The second model specification will contain three categorical variables corresponding to separate preprocessing steps. For each of them, we will use sum coding to show if any setting at any of the preprocessing steps results in significantly different HEP size and HEP-anxiety estimates compared to the average of all settings at this preprocessing step (Formula 3). The significance of effects will be determined based on a permutation procedure (see section Permutation clustering) and the size of effects will be assessed according to equivalence testing procedure (see section Equivalence testing).
+
+
+Formula 2:
+
+Formula 3:
+
+Permutation clustering
+Spatiotemporal permutation clustering on mixed linear model-based t-values will be performed to assess the relationship between HEP and anxiety (Maris & Oostenveld, 2007; Ehinger et al., in prep.). Briefly, a test is performed for each point in time and space and the t-value is retained. Next, based on temporal and spatial adjacency, individual samples are clustered together following a threshold-free cluster enhancement procedure (TFCE) (Smith & Nichols, 2009), while a minimum of 2 adjacent samples at 250 Hz sampling frequency will be necessary to form a cluster. Within each cluster, the sum of all t-values will be calculated. To assess the likelihood of obtaining the observed result by chance, a permutation approach will be employed where anxiety values are shuffled across subjects, or in case of multiverse level-effects, multiverse labels will be shuffled within subjects. To form a null distribution, the clustering procedure will be repeated 1000 times, retaining the maximum cluster-level statistic for each permutation. The original cluster t-value will be compared against this null distribution and the effect considered significant based on the 5% alpha level (two-tailed). In supplementary materials, we will summarize all space-time points included in all significant clusters.
+High and low GAD-7 group comparison
+For comparability with other anxiety studies, we will also statistically contrast high and low GAD-7 groups (Hypotheses 1bd and 2b, Table 1). This analysis will allow us to identify the HEP-anxiety association in case it is only pronounced among individuals with high GAD-7 scores rather than scales continually with anxiety scores in the overall sample (Adams et al., 2022) (see Sampling plan for more details). In contrast to hypotheses 1ac and 2a, where anxiety is a continuous variable, in hypotheses 1bd and 2b, we will code the anxiety group as a categorical variable with two levels and repeat the analysis described above (see Table 1).
+Equivalence testing
+We will use equivalence testing (Lakens et al., 2018) to assess if all observed results can be considered practically meaningful or rather negligibly small. For mixed model analyses on averaged HEP amplitudes, we will formally assess the absence of effect (Counsell & Cribbie, 2015; Lakens, 2017) using predetermined equivalence bounds (see below). We will perform two one-sided one-dimensional contrast tests on mixed model estimates with contest1D function from R lmerTest package and using Satterthwaite approximation to compute degrees of freedom (Kuznetsova et al., 2020). For the permutation clustering approaches, we first re-compute a mixed linear model using the average HEP amplitude across space-time points included in a significant cluster. Second, we perform equivalence testing on mixed model estimates as described above. If no significant clusters are observed, we use the average HEP amplitude of all space-time points in a mixed model, and then perform equivalence testing on its estimates.
+
+
+We used simulations to obtain a practical cut-off value for the hypothesized HEP-anxiety association. In particular, we wanted to determine what could be the smallest HEP-anxiety association that other researchers could robustly replicate, given realistic EEG settings such as the signal-to-noise level. Hence, we used a publicly available open dataset containing EEG and ECG data (cite) and simulated values of anxiety with varying degrees of correlation to HEP to approximate the structure of our data. Results show that for the effect to be detectable with 80 percent power given the practical limitations (e.g., sample size and noise levels), the realistic cut-off value for the HEP-anxiety regression coefficient is +- 0.017 (Figure 1c,d - for HEP shapes and for equivalence bound estimations). See supplements for more details on simulation-based equivalence bound computation.
+
+
+
+
+Control Analyses
+The HEP-anxiety association might be explained by their common confounding factors. To address this issue when answering our main research question (Hypotheses 1a-d, Table 1), we propose several control analyses. These include addition of control variables to previously describe mixed linear models followed by mediation analysis, as well as repeating our main analysis steps on the ECG signal.
+Confounders
+In separate mixed linear models based on average HEP in a predefined ROI (Hypotheses 1ab, Table 1) or in models based on average HEP in a significant cluster (Hypotheses 1cd, Table 1), we will perform additional control analyses only if the HEP-anxiety association is significant and the corresponding equivalence test is not significant.
+The models with controls will include ten control variables: age, sex, HR, HRV, alpha power, depression score (IDS), presence of diabetes, BMI, systolic blood pressure, and an interaction term for anxiety and time between GAD-7 and EEG recording. We include a range of covariates in the statistical models due to the well-documented co-occurrence of physiological and psychological symptoms with anxiety. Cardiac parameters HR and HRV (Calvo et al., 1996; Chalmers et al., 2014), alpha power [e](Knyazev et al., 2006), BMI (Gariepy et al., 2010; Haghighi et al., 2016), systolic blood pressure (Hildrum et al., 2008), depression scores (Kumral et al., 2022; Perogamvros et al., 2019), age (Flint, 1994; Hinz et al., 2023), and sex (Egloff & Schmukle, 2004) could confound HEP-anxiety association. 
+
+
+However, power simulation analysis showed that including a range of correlated covariates extremely decreases the power of the test (Supplementary materials figure X). That is why we run principal component analysis (PCA) on the matrix of all control variables first, and then use all components that explain more than 1% of variance in HEP as regressors. Simulations showed that such an approach leads to a pronounced increase in power.
+Mediation
+If the relationship between HEP and anxiety does not remain significant after adding control variables as described in the previous section, some variables are confounding the HEP-anxiety relationship. However, the use of PCA in our analysis complicates the interpretation: it is unclear which control variables affect the association. Hence, in such cases we will perform mediation analyses for each of the control variables separately. First, we will examine correlations of anxiety with each of the control variables: age, sex, BMI, systolic blood pressure, diabetes, depression scores, alpha power, HR, and HRV. Second, we will perform a mediation analysis for those control variables that correlate with anxiety significantly to determine if a mediator fully accounts for the HEP-anxiety association. 
+ECG 
+We will repeat all possible processing steps (baseline, filter) on the ECG channel to assess if the HEP-anxiety effects that we observe are not due to volume conduction. If we observe significant association between HEP and anxiety in Hypothesis 1a-d (Table 1) we will include the average ECG amplitude across significant space-time points as a control variable and recompute the model. 
+Data availability statement
+
+
+The LIFE dataset is available upon a registered request from the Leipzig Research Center for Civilization Diseases at Leipzig University. 
+Code availability statement
+
+
+All codes used for analysis will be openly available at (GitHub link for the project). All sample codes for analysis and visualization are already available via the same link and can be run on a provided simulated dataset.
+Acknowledgements
+The authors received no specific funding for this work.
+Author contributions[f]
+Competing interests
+The authors declare no competing interests.
+Figures & Figure captions[g][h]
+  
+Figure 1a. 
+Tables[i] 
+Question
+	Hypothesis
+	Sampling plan (e.g., power analysis)
+	Analysis Plan
+	Interpretation given to different outcomes
+	1. Larger resting-state HEP amplitudes (more negative for negative deflections, more positive for positive deflections) are positively associated with anxiety symptoms given combined evidence from all multiverses
+	1a) Larger HEP amplitudes are associated with stronger anxiety symptoms, as assessed by the Generalized Anxiety Disorder Questionnaire (GAD-7), in a predefined region of interest in a population sample
+
+
+	95% power for the 3000 subjects sample 
+95% power for equivalence tests
+	1 MLM with 1 fixed effect of anxiety on HEP, subject-level random intercepts, and multiverse-level random slopes and intercepts.
+To obtain p-values for mixed model coefficients, we will use Satterthwaite approximation.
+To establish if effects are negligibly small, we will perform an equivalence test on mixed model estimates.
+
+
+	If the coefficient of anxiety on HEP is significant, HEP and anxiety are associated in a predefined region of interest in the population sample.
+If an equivalence test on the anxiety coefficient is significant then the HEP-anxiety association is negligibly small. 
+If the HEP-anxiety association is significant and the corresponding equivalence test is not significant, we will perform additional control analyses:
+1. Adding confounders to the model. Because of possible multicollinearity we will first perform PCA to orthogonalize the confounders before including components to the model. 
+If the HEP-anxiety association is not significant or negligibly small after controlling for confounders, we will also perform mediation analysis separately for each of the confounding variables and conclude that some of them mediate the HEP-anxiety association. 
+2. ECG control
+If the HEP-anxiety association is not significant or it is negligibly small after controlling for the average ECG amplitude in a predefined time interval, we will conclude that effects are potentially driven by CFA artifacts. 
+	
+
+	1b) Larger HEP amplitudes are associated with stronger anxiety symptoms, as assessed by the Generalized Anxiety Disorder Questionnaire (GAD-7), in a predefined region of interest when comparing high and low GAD-7 groups 
+	75% power for a minimum of 40 subjects sample but 95% with XX subjects
+95% power for equivalence tests
+	1 MLM with 1 fixed effect of the anxiety group on HEP, subject-level random intercepts, and multiverse-level random slopes and intercepts.
+To obtain p-values for mixed model coefficients, we will use Satterthwaite approximation.
+To establish if effects are negligibly small, we will perform an equivalence test on mixed model estimates.
+
+
+	If the coefficient of the anxiety group on HEP is significant, HEP and anxiety are associated in a predefined region of interest when comparing high and low GAD-7 subjects.
+If an equivalence test on the anxiety group coefficient is significant then the HEP-anxiety association is negligibly small. 
+If the HEP-anxiety association is significant and the corresponding equivalence test is not significant, we will perform additional control analyses:
+1. Adding confounders to the model. Because of possible multicollinearity we will first perform PCA to orthogonalize the confounders before including components to the model. 
+If the HEP-anxiety association is not significant or negligibly small after controlling for confounders, we will also perform mediation analysis separately for each of the confounding variables and conclude that some of them mediate the HEP-anxiety association. 
+2. ECG control
+If the HEP-anxiety association is not significant or it is negligibly small after controlling for the average ECG amplitude in a predefined time interval, we will conclude that effects are potentially driven by CFA artifacts.
+	
+
+	1c) Larger HEP amplitudes are associated with stronger anxiety symptoms, as assessed by the Generalized Anxiety Disorder Questionnaire (GAD-7), in any region at any time point in a population sample [j]
+
+
+	95% power for the 3000 subjects sample 
+95% power for equivalence tests
+
+
+	For each space-time point, we perform 1 MLM with 1 fixed effect of anxiety on HEP, subject-level random intercepts, and multiverse-level random slopes and intercepts.
+Spatio-temporal clustering will be performed to correct for multiple comparisons. 
+To establish if the effects are negligibly small, for each significant cluster, we will re-compute the model using the average HEP across all space-time points included in a significant cluster and perform an equivalence test on the resulting mixed model estimates. If no significant clusters were observed, we will re-compute the model using the average HEP across all space-time points and perform an equivalence test on the resulting estimates.
+
+
+	If there are significant clusters for an effect of anxiety on HEP, HEP and anxiety are associated in any region at any time point in the population sample.
+For each significant cluster, if an equivalence test on mixed model estimates is significant then the HEP-anxiety association in this cluster is negligibly small. 
+If no significant clusters are observed and an equivalence test on the estimates from the model including the average HEP across all space-time points is significant then the HEP-anxiety association is negligibly small.
+If the HEP-anxiety association is significant and the equivalence test is not significant in any cluster, we will perform additional control analyses based on mixed models using average HEP value in a cluster:
+1. Adding confounders to the model. Because of possible multicollinearity we will first perform PCA to orthogonalize the confounders before including components to the model. 
+If the HEP-anxiety association is not significant or negligibly small after controlling for confounders, we will also perform mediation analysis separately for each of the confounding variables and conclude that some of them mediate the HEP-anxiety association. 
+2. ECG control
+If the HEP-anxiety association is not significant or it is negligibly small after controlling for the average ECG amplitude in a time interval of the previously significant cluster, we will conclude that effects are potentially driven by CFA artifacts. 
+	
+
+	1d) Larger HEP amplitudes are associated with stronger anxiety symptoms, as assessed by the Generalized Anxiety Disorder Questionnaire (GAD-7), in any region at any time point when comparing high and low GAD-7 groups 
+
+
+	75% power for a minimum of 40 subjects sample but 95% with XX subjects
+95% power for equivalence tests
+
+
+	For each space-time point, we perform 1 MLM with 1 fixed effect of the anxiety group on HEP, subject-level random intercepts, and multiverse-level random slopes and intercepts.
+Spatio-temporal clustering will be performed to correct for multiple comparisons. 
+To establish if the effects are negligibly small, for each significant cluster, we will re-compute the model using the average HEP across all space-time points included in a significant cluster and perform an equivalence test on the resulting mixed model estimates. If no significant clusters were observed, we will re-compute the model using the average HEP across all space-time points and perform an equivalence test on the resulting estimates.
+
+
+	If there are significant clusters for an effect of the anxiety group on HEP, HEP and anxiety are associated in any region at any time point when comparing high and low GAD-7 subjects..
+For each significant cluster, if an equivalence test on mixed model estimates is significant then the HEP-anxiety association in this cluster is negligibly small. 
+If no significant clusters are observed and an equivalence test on the estimates from the model including the average HEP across all space-time points is significant then the HEP-anxiety association is negligibly small.
+If the HEP-anxiety association is significant and the equivalence test is not significant in any cluster, we will perform additional control analyses based on mixed models using average HEP value in a cluster:
+1. Adding confounders to the model. Because of possible multicollinearity we will first perform PCA to orthogonalize the confounders before including components to the model. 
+If the HEP-anxiety association is not significant or negligibly small after controlling for confounders, we will also perform mediation analysis separately for each of the confounding variables and conclude that some of them mediate the HEP-anxiety association. 
+2. ECG control
+If the HEP-anxiety association is not significant or it is negligibly small after controlling for the average ECG amplitude in a time interval of the previously significant cluster, we will conclude that effects are potentially driven by CFA artifacts. 
+	2. Estimated HEP-anxiety association is affected by  a preprocessing pipeline 
+	2a) Estimated HEP-anxiety association is affected by  a preprocessing pipeline in any region at any time point in a population sample
+
+
+	95% power for the 3000 subjects sample 
+95% power for equivalence tests
+	For each space-time point, we perform 2 separate mixed models. Both of them include a fixed effect of anxiety on HEP, subject-level random intercepts, and multiverse-level random slopes and intercepts. The first model also includes fixed effects of multiverse (a categorical variable with 16 levels) and an interaction of multiverse and anxiety. The second model includes fixed effects of 3 different preprocessing steps: filter (a categorical variable with 2 levels), baseline (a categorical variable with 2 levels), and ICA (a categorical variable with 4 levels), and also their interactions with anxiety.
+Spatio-temporal clustering will be performed to correct for multiple comparisons. 
+To establish if the effects are negligibly small, for each significant cluster, we will re-compute the model using the average HEP across all space-time points included in a significant cluster and perform an equivalence test on the resulting mixed model estimates. If no significant clusters were observed, we will re-compute the model using the average HEP across all space-time points and perform an equivalence test on the resulting estimates.
+	If a coefficient on the interaction of anxiety with the multiverse categorical variable results in a significant cluster, a specific multiverse (combination of preprocessing steps) affects the estimated HEP-anxiety association in a population sample.
+If any coefficient on the interaction of anxiety with any of the 3 preprocessing steps categorical variables results in a significant cluster, a preprocessing step affects the estimated HEP-anxiety association in a population sample.
+For each of the 4 previously described coefficients and each of the associated significant clusters, if an equivalence test is significant then the effect of a preprocessing step or their combination is negligibly small in this cluster.
+For each of the 4 previously described coefficients, if no significant clusters are observed and an equivalence test on the estimates from the model including the average HEP across all space-time points is significant, the effect of a preprocessing step or their combination is negligibly small. 
+	
+
+	2b) Estimated HEP-anxiety association is affected by  a preprocessing pipeline in any region at any time point when comparing high and low GAD-7 groups
+	75% power for a minimum of 40 subjects sample but 95% with XX subjects
+95% power for equivalence tests
+	For each space-time point, we perform 2 separate mixed models. Both of them include a fixed effect of the anxiety group on HEP, subject-level random intercepts, and multiverse-level random slopes and intercepts. The first model also includes fixed effects of multiverse (a categorical variable with 16 levels) and an interaction of multiverse and anxiety. The second model includes fixed effects of 3 different preprocessing steps: filter (a categorical variable with 2 levels), baseline (a categorical variable with 2 levels), and ICA (a categorical variable with 4 levels), and also their interactions with anxiety.
+Spatio-temporal clustering will be performed to correct for multiple comparisons. 
+To establish if the effects are negligibly small, for each significant cluster, we will re-compute the model using the average HEP across all space-time points included in a significant cluster and perform an equivalence test on the resulting mixed model estimates. If no significant clusters were observed, we will re-compute the model using the average HEP across all space-time points and perform an equivalence test on the resulting estimates.
+	If a coefficient on the interaction of the anxiety group with the multiverse categorical variable results in a significant cluster, a specific multiverse (combination of preprocessing steps) affects the estimated HEP-anxiety association when comparing high and low GAD-7 groups.
+If any coefficient on the interaction of the anxiety group with any of the 3 preprocessing steps categorical variables results in a significant cluster, a preprocessing step affects the estimated HEP-anxiety association.
+For each of the 4 previously described coefficients and each of the associated significant clusters, if an equivalence test is significant then the effect of a preprocessing step or their combination is negligibly small in this cluster.
+For each of the 4 previously described coefficients, if no significant clusters are observed and an equivalence test on the estimates from the model including the average HEP across all space-time points is significant, the effect of a preprocessing step or their combination is negligibly small. 
+	
+
+Table 1. Design table.[k]
+
+
+References
+
+
+
+
+Adams, K. L., Edwards, A., Peart, C., Ellett, L., Mendes, I., Bird, G., & Murphy, J. (2022). The association between anxiety and cardiac interoceptive accuracy: A systematic review and meta-analysis. Neuroscience & Biobehavioral Reviews, 140, 104754. https://doi.org/10.1016/j.neubiorev.2022.104754
+Al, E., Iliopoulos, F., Forschack, N., Nierhaus, T., Grund, M., Motyka, P., Gaebler, M., Nikulin, V. V., & Villringer, A. (2020). Heart-brain interactions shape somatosensory perception and evoked potentials. Proceedings of the National Academy of Sciences of the United States of America, 117(19), 10575–10584. https://doi.org/10.1073/pnas.1915629117
+Azzalini, D., Rebollo, I., & Tallon-Baudry, C. (2019). Visceral Signals Shape Brain Dynamics and Cognition. Trends in Cognitive Sciences, 23(6), 488–509. https://doi.org/10.1016/j.tics.2019.03.007
+Berntson, G. G., & Khalsa, S. S. (2021). Neurosciences Neural Circuits of Interoception. Trends in Neurosciences, 44(1), 17–28. https://doi.org/10.1016/j.tins.2020.09.011
+Bischoff, T., Anderson, S. R., Heafner, J., & Tambling, R. (2020). Establishment of a reliable change index for the GAD-7. Psychology, Community & Health, 8(1), 176–187. https://doi.org/10.5964/pch.v8i1.309
+Calvo, M. G., Szabo, A., & Capafons, J. (1996). Anxiety and heart rate under psychological stress: The effects of exercise-training. Anxiety, Stress and Coping, 9(4), 321–337. https://doi.org/10.1080/10615809608249409
+Candelaria-Cook, F. T., Solis, I., Schendel, M. E., Wang, Y.-P., Wilson, T. W., Calhoun, V. D., & Stephen, J. M. (2022). Developmental trajectory of MEG resting-state oscillatory activity in children and adolescents: A longitudinal reliability study. Cerebral Cortex (New York, N.Y.: 1991), 32(23), 5404–5419. https://doi.org/10.1093/cercor/bhac023
+Chalmers, J. A., Quintana, D. S., Abbott, M. J. A., & Kemp, A. H. (2014). Anxiety disorders are associated with reduced heart rate variability: A meta-analysis. Frontiers in Psychiatry, 5(JUL), 1–11. https://doi.org/10.3389/fpsyt.2014.00080
+Clark, C. R., Galletly, C. A., Ash, D. J., Moores, K. A., Penrose, R. A., & McFarlane, A. C. (2009). Evidence-Based Medicine Evaluation of Electrophysiological Studies of the Anxiety Disorders. Clinical EEG and Neuroscience, 40(2), 84–112. https://doi.org/10.1177/155005940904000208
+Clayson, P. E., Baldwin, S. A., Rocha, H. A., & Larson, M. J. (2021). The data-processing multiverse of event-related potentials (ERPs): A roadmap for the optimization and standardization of ERP processing and reduction pipelines. NeuroImage, 245(November), 118712. https://doi.org/10.1016/j.neuroimage.2021.118712
+Coll, M. P., Hobson, H., Bird, G., & Murphy, J. (2021). Systematic review and meta-analysis of the relationship between the heartbeat-evoked potential and interoception. Neuroscience and Biobehavioral Reviews, 122, 190–200. https://doi.org/10.1016/j.neubiorev.2020.12.012
+Coll, M.-P., Hobson, H., & Murphy, J. (2020). Systematic review and meta-analysis of the relationship between the heartbeat-evoked potential and inter[l]oception. https://doi.org/10.31234/osf.io/g2zhc
+Craig, A. D. (2002). How do you feel? Interoception: The sense of the physiological condition of the body. Nature Reviews Neuroscience, 3(8), 655–666. https://doi.org/10.1038/nrn894
+Delorme, A. (2023). EEG is better left alone. Scientific Reports, 13(1), Article 1. https://doi.org/10.1038/s41598-023-27528-0
+Delorme, A., & Makeig, S. (2004). EEGLAB: An open source toolbox for analysis of single-trial EEG dynamics including independent component analysis. Journal of Neuroscience Methods, 134(1), 9–21. https://doi.org/10.1016/j.jneumeth.2003.10.009
+Desmedt, O., Houte, M. V. D., Walentynowicz, M., Dekeyser, S., Luminet, O., & Corneille, O. (2023). A Systematic Review and Meta-analysis on the Association Between Heartbeat Counting Task Performance and Mental Disorders and Their Risk Factors Among Adults. https://doi.org/10.31219/osf.io/h3by9
+Does, A. J. W. V. D., Antony, M. M., Ehlers, A., & Barsky, A. J. (2000). Heartbeat perception in panic disorder: A reanalysis. 38.
+Domschke, K., Stevens, S., Pfleiderer, B., & Gerlach, A. L. (2010). Interoceptive sensitivity in anxiety and anxiety disorders: An overview and integration of neurobiological findings. Clinical Psychology Review, 30(1), 1–11. https://doi.org/10.1016/j.cpr.2009.08.008
+Egloff, B., & Schmukle, S. C. (2004). Gender differences in implicit and explicit anxiety measures. Personality and Individual Differences, 36(8), 1807–1815. https://doi.org/10.1016/j.paid.2003.07.002
+Ehlers, A., & Breuer, P. (1992). Increased cardiac awareness in panic disorder. Journal of Abnormal Psychology, 101(3), 371–382. https://doi.org/10.1037//0021-843x.101.3.371
+Ehlers, A., Breuer, P., Dohn, D., & Fiegenbaum, W. (1995). Heartbeat perception and panic disorder: Possible explanations for discrepant findings. Behaviour Research and Therapy, 33(1), 69–76. https://doi.org/10.1016/0005-7967(94)E0002-Z
+Flint, A. J. (1994). Epidemiology and comorbidity of anxiety disorders in the elderly. The American Journal of Psychiatry, 151(5), 640–649. https://doi.org/10.1176/ajp.151.5.640
+Fukushima, H., Terasawa, Y., & Umeda, S. (2011). Association between interoception and empathy: Evidence from heartbeat-evoked brain potential. International Journal of Psychophysiology, 79(2), 259–265. https://doi.org/10.1016/j.ijpsycho.2010.10.015
+Garfinkel, S. N., Manassei, M. F., Hamilton-Fletcher, G., den Bosch, Y. I., Critchley, H. D., & Engels, M. (2016). Interoceptive dimensions across cardiac and respiratory axes. Philosophical Transactions of the Royal Society B: Biological Sciences, 371(1708).
+Gariepy, G., Nitka, D., & Schmitz, N. (2010). The association between obesity and anxiety disorders in the population: A systematic review and meta-analysis. International Journal of Obesity (2005), 34(3), 407–419. https://doi.org/10.1038/ijo.2009.252
+Haghighi, M., Jahangard, L., Ahmadpanah, M., Bajoghli, H., Holsboer-Trachsler, E., & Brand, S. (2016). The relation between anxiety and BMI - is it all in our curves? Psychiatry Research, 235, 49–54. https://doi.org/10.1016/j.psychres.2015.12.002
+Hansen, B. B., & Klopfer, S. O. (2006). Optimal Full Matching and Related Designs via Network Flows. Journal of Computational and Graphical Statistics, 15(3), 609–627. https://doi.org/10.1198/106186006X137047
+Harder, J. A. (2020). The Multiverse of Methods: Extending the Multiverse Analysis to Address Data-Collection Decisions. Perspectives on Psychological Science, 15(5), 1158–1177. https://doi.org/10.1177/1745691620917678
+Hildrum, B., Mykletun, A., Holmen, J., & Dahl, A. A. (2008). Effect of anxiety and depression on blood pressure: 11-year longitudinal population study. The British Journal of Psychiatry: The Journal of Mental Science, 193(2), 108–113. https://doi.org/10.1192/bjp.bp.107.045013
+Hinz, A., Esser, P., Friedrich, M., Glaesmer, H., Mehnert-Theuerkauf, A., Schroeter, M. L., Petrowski, K., & Toussaint, A. (2023). Changes in anxiety in the general population over a six-year period. PloS One, 18(9), e0291206. https://doi.org/10.1371/journal.pone.0291206
+Jawinski, P., Kittel, J., Sander, C., Huang, J., Spada, J., Ulke, C., Wirkner, K., Hensch, T., & Hegerl, U. (2017). Recorded and Reported Sleepiness: The Association Between Brain Arousal in Resting State and Subjective Daytime Sleepiness. Sleep, 40(7). https://doi.org/10.1093/sleep/zsx099
+John Rush, A., Giles, D. E., Schlesser, M. A., Fulton, C. L., Weissenburger, J., & Burns, C. (1986). The inventory for depressive symptomatology (IDS): Preliminary findings. Psychiatry Research, 18(1), 65–87. https://doi.org/10.1016/0165-1781(86)90060-0
+Judah, M. R., Shurkova, E. Y., Hager, N. M., White, E. J., Taylor, D. L., & Grant, D. M. M. (2018). The relationship between social anxiety and heartbeat evoked potential amplitude. Biological Psychology, 139(December 2017), 1–7. https://doi.org/10.1016/j.biopsycho.2018.09.013
+Knyazev, G. G., Savostyanov, A. N., & Levin, E. A. (2004). Alpha oscillations as a correlate of trait anxiety. International Journal of Psychophysiology, 53(2), 147–160. https://doi.org/10.1016/j.ijpsycho.2004.03.001
+Knyazev, G. G., Savostyanov, A. N., & Levin, E. A. (2006). Alpha synchronization and anxiety: Implications for inhibition vs. alertness hypotheses. International Journal of Psychophysiology, 59(2), 151–158. https://doi.org/10.1016/j.ijpsycho.2005.03.025
+Kołodziej, A., Magnuski, M., Ruban, A., & Brzezicka, A. (2021). No relationship between frontal alpha asymmetry and depressive disorders in a multiverse analysis of five studies. eLife, 10, e60595. https://doi.org/10.7554/eLife.60595
+Kritzman, L., Eidelman-Rothman, M., Keil, A., Freche, D., Sheppes, G., & Levit-Binnun, N. (2022). Steady-state visual evoked potentials differentiate between internally and externally directed attention. NeuroImage, 254(March), 119133. https://doi.org/10.1016/j.neuroimage.2022.119133
+Kumral, D., Al, E., Cesnaite, E., Kornej, J., Sander, C., Hensch, T., Zeynalova, S., Tautenhahn, S., Hagendorf, A., Laufs, U., Wachter, R., Nikulin, V., & Villringer, A. (2022). The Neural Representation of the Heart is Strongly Attenuated in Patients with Atrial Fibrillation. SSRN Electronic Journal. https://doi.org/10.2139/ssrn.4079330
+Kuznetsova, A., Brockhoff, P. B., Christensen, R. H. B., & Jensen, S. P. (2020). lmerTest: Tests in Linear Mixed Effects Models (3.1-3) [Computer software]. https://cran.r-project.org/web/packages/lmerTest/index.html
+Lakens, D., Scheel, A. M., & Isager, P. M. (2018). Equivalence Testing for Psychological Research: A Tutorial. Advances in Methods and Practices in Psychological Science, 1(2), 259–269. https://doi.org/10.1177/2515245918770963
+Lee, T. W., Girolami, M., & Sejnowski, T. J. (1999). Independent component analysis using an extended infomax algorithm for mixed subgaussian and supergaussian sources. Neural Computation, 11(2), 417–441. https://doi.org/10.1162/089976699300016719
+Loeffler, M., Engel, C., Ahnert, P., Alfermann, D., Arelin, K., Baber, R., Beutner, F., Binder, H., Brähler, E., Burkhardt, R., Ceglarek, U., Enzenbach, C., Fuchs, M., Glaesmer, H., Girlich, F., Hagendorff, A., Häntzsch, M., Hegerl, U., Henger, S., … Thiery, J. (2015). The LIFE-Adult-Study: Objectives and design of a population-based cohort study with 10,000 deeply phenotyped adults in Germany. BMC Public Health, 15(1), 1–14. https://doi.org/10.1186/s12889-015-1983-z
+Löwe, B., Decker, O., Müller, S., Brähler, E., Schellberg, D., Herzog, W., & Herzberg, P. Y. (2008). Validation and Standardization of the Generalized Anxiety Disorder Screener (GAD-7) in the General Population. Medical Care, 46(3), 266. https://doi.org/10.1097/MLR.0b013e318160d093
+Luck, S. J. (2014). An Introduction to the Event-Related Potential Technique, second edition. MIT Press.
+Luft, C. D. B., & Bhattacharya, J. (2015). Aroused with heart: Modulation of heartbeat evoked potential by arousal induction and its oscillatory correlates. Scientific Reports, 5(March), 1–11. https://doi.org/10.1038/srep15717
+Mai, S., Wong, C. K., Georgiou, E., & Pollatos, O. (2018). Interoception is associated with heartbeat-evoked brain potentials (HEPs) in adolescents. Biological Psychology, 137, 24–33. https://doi.org/10.1016/j.biopsycho.2018.06.007
+Maris, E., & Oostenveld, R. (2007). Nonparametric statistical testing of EEG- and MEG-data. Journal of Neuroscience Methods, 164(1), 177–190. https://doi.org/10.1016/j.jneumeth.2007.03.024
+Michael, T., Zetsche, U., & Margraf, J. (2007). Epidemiology of anxiety disorders. Psychiatry, 6(4), 136–142. https://doi.org/10.1016/j.mppsy.2007.01.007
+Mullen, T. R., Kothe, C. A. E., Chi, Y. M., Ojeda, A., Kerth, T., Makeig, S., Jung, T.-P., & Cauwenberghs, G. (2015). Real-Time Neuroimaging and Cognitive Monitoring Using Wearable Dry EEG. Ieee Transactions on Biomedical Engineering, 62(11), 2553–2567. https://doi.org/10.1109/TBME.2015.2481482
+Murphy, J., Geary, H., Millgate, E., Catmur, C., & Bird, G. (2018). Direct and indirect effects of age on interoceptive accuracy and awareness across the adult lifespan. Psychonomic Bulletin and Review, 25(3), 1193–1202. https://doi.org/10.3758/s13423-017-1339-z
+Oostenveld, R., Fries, P., Maris, E., & Schoffelen, J. M. (2011). FieldTrip: Open source software for advanced analysis of MEG, EEG, and invasive electrophysiological data. Computational Intelligence and Neuroscience, 2011. https://doi.org/10.1155/2011/156869
+Pang, J., Tang, X., Li, H., Hu, Q., Cui, H., Zhang, L., Li, W., Zhu, Z., Wang, J., & Li, C. (2019). Altered Interoceptive Processing in Generalized Anxiety Disorder—A Heartbeat-Evoked Potential Research. Frontiers in Psychiatry, 10(September), 1–9. https://doi.org/10.3389/fpsyt.2019.00616
+Park, H. D., & Blanke, O. (2019). Heartbeat-evoked cortical responses: Underlying mechanisms, functional roles, and methodological considerations. NeuroImage, 197(April), 502–511. https://doi.org/10.1016/j.neuroimage.2019.04.081
+Paulus, M. P., & Stein, M. B. (2006). An Insular View of Anxiety. Biological Psychiatry, 60(4), 383–387. https://doi.org/10.1016/j.biopsych.2006.03.042
+Paulus, M. P., & Stein, M. B. (2010). Interoception in anxiety and depression. Brain Structure and Function, 214(5), 451–463. https://doi.org/10.1007/s00429-010-0258-9
+Perakakis, P. (2019). HEPLAB: a Matlab graphical interface for the preprocessing of the heartbeat-evoked potential (Version v1.0.0) [Computer software]. http://doi.org/10.5281/zenodo.2649943
+Perogamvros, L., Park, H. D., Bayer, L., Perrault, A. A., Blanke, O., & Schwartz, S. (2019). Increased heartbeat-evoked potential during REM sleep in nightmare disorder. NeuroImage: Clinical, 22(December 2018), 101701. https://doi.org/10.1016/j.nicl.2019.101701
+Petzschner, F. H., Weber, L. A., Wellstein, K. V., Paolini, G., Do, C. T., & Stephan, K. E. (2019). Focus of attention modulates the heartbeat evoked potential. NeuroImage, 186(November 2018), 595–606. https://doi.org/10.1016/j.neuroimage.2018.11.037
+Pion-Tonachini, L., Kreutz-Delgado, K., & Makeig, S. (2019). ICLabel: An automated electroencephalographic independent component classifier, dataset, and website. NeuroImage, 198(May), 181–197. https://doi.org/10.1016/j.neuroimage.2019.05.026
+Pollatos, O., Traut-Mattausch, E., & Schandry, R. (2009). Differential effects of anxiety and depression on interoceptive accuracy. Depression and Anxiety, 26(2), 167–173. https://doi.org/10.1002/da.20504
+Ripley, B., Venables, B., Bates, D. M., ca 1998), K. H. (partial port, ca 1998), A. G. (partial port, & Firth, D. (2024). MASS: Support Functions and Datasets for Venables and Ripley’s MASS (7.3-60.0.1) [Computer software]. https://cran.r-project.org/web/packages/MASS/index.html
+Sander, C., Hensch, T., Wittekind, D. A., Böttger, D., & Hegerl, U. (2016). Assessment of Wakefulness and Brain Arousal Regulation in Psychiatric Research. Neuropsychobiology, 72(3–4), 195–205. https://doi.org/10.1159/000439384
+Schandry, R., Sparrer, B., & Weitkunat, R. (1986). From the heart to the brain. Intern. J. Neuroscience, 30, 261–275. https://doi.org/10.1055/s-2003-812550
+Schubert, A. L., Löffler, C., Hagemann, D., & Sadus, K. (2023). How robust is the relationship between neural processing speed and cognitive abilities? Psychophysiology, 60(2), 1–21. https://doi.org/10.1111/psyp.14165
+Shaffer, F., & Ginsberg, J. P. (2017). An Overview of Heart Rate Variability Metrics and Norms. Frontiers in Public Health, 5, 258. https://doi.org/10.3389/fpubh.2017.00258
+Smith, S. M., & Nichols, T. E. (2009). Threshold-free cluster enhancement: Addressing problems of smoothing, threshold dependence and localisation in cluster inference. NeuroImage, 44(1), 83–98. https://doi.org/10.1016/j.neuroimage.2008.03.061
+Sousa, T. V., Viveiros, V., Chai, M. V., Vicente, F. L., Jesus, G., Carnot, M. J., Gordo, A. C., & Ferreira, P. L. (2015). Reliability and validity of the Portuguese version of the Generalized Anxiety Disorder (GAD-7) scale. Health and Quality of Life Outcomes, 13(1), 50. https://doi.org/10.1186/s12955-015-0244-2
+Spitzer, R. L., Kroenke, K., Williams, J. B. W., & Löwe, B. (2006). A Brief Measure for Assessing Generalized Anxiety Disorder: The GAD-7. Archives of Internal Medicine, 166(10), 1092–1097. https://doi.org/10.1001/archinte.166.10.1092
+Stern, E. R. (2014). Neural Circuitry of Interoception: New Insights into Anxiety and Obsessive-Compulsive Disorders. Current Treatment Options in Psychiatry, 1(3), 235–247. https://doi.org/10.1007/s40501-014-0019-0
+Tanner, D., Morgan-Short, K., & Luck, S. J. (2015). How inappropriate high-pass filters can produce artifactual effects and incorrect conclusions in ERP studies of language and cognition. Psychophysiology, 52(8), 997–1009. https://doi.org/10.1111/psyp.12437
+Tumati, S., Paulus, M. P., & Northoff, G. (2021). Out-of-step: Brain-heart desynchronization in anxiety disorders. Molecular Psychiatry, 6. https://doi.org/10.1038/s41380-021-01029-w
+Vaglio, M., Maison-Blanche, P., Toninelli, G., Isola, L., Ferrari, F., & Badilini, F. (2022). CER-S, an ECG Platform for the Management of Continuous ECG Recordings and Databases. 2022 Computing in Cardiology (CinC), 498, 1–4. https://doi.org/10.22489/CinC.2022.336
+Verdonk, C., Teed, A. R., White, E. J., Ren, X., Stewart, J. L., Paulus, M. P., & Khalsa, S. S. (2023). Heartbeat-evoked neural response abnormalities in generalized anxiety disorder during peripheral adrenergic stimulation [Preprint]. Psychiatry and Clinical Psychology. https://doi.org/10.1101/2023.06.09.23291166
+Vidaurre, C., Nikulin, V. V., & Herrojo Ruiz, M. (2023). Identification of spatial patterns with maximum association between power of resting state neural oscillations and trait anxiety. Neural Computing and Applications, 35(8), 5737–5749. https://doi.org/10.1007/s00521-022-07847-5
+Ward, R. T., Smith, S. L., Kraus, B. T., Allen, A. V., Moses, M. A., & Simon-Dack, S. L. (2018). Alpha band frequency differences between low-trait and high-trait anxious individuals. NeuroReport, 29(2), 79. https://doi.org/10.1097/WNR.0000000000000915
+Winkler, I., Debener, S., Muller, K. R., & Tangermann, M. (2015). On the influence of high-pass filtering on ICA-based artifact reduction in EEG-ERP. Proceedings of the Annual International Conference of the IEEE Engineering in Medicine and Biology Society, EMBS, 2015-Novem, 4101–4105. https://doi.org/10.1109/EMBC.2015.7319296
+World Health Organization (n.d.) Anxiety Disorders. Retrieved May 7, 2024, from https://www.who.int/news-room/fact-sheets/detail/anxiety-disorders
+
+
+
+
+
+
+Supplementary materials
+Equivalence bound computation
+
+
+Data was obtained from the Cz electrode of the pre-processed LEMON data. 
+Associations were defined as regression coefficients ranging between 0.008 and 0.18. Across all subjects, average HEPs were distributed around a mean amplitude of 0.4 (SD = 0.1). Inter beat interval was set to 1 second, and HEP onset occurred randomly between 190-210 ms post stimulus. The HEP waveform was created based on the subject specific HEP amplitude using a Gaussian function and lasted for 300ms.
+
+
+Independent samples regression coefficient t-statistic was calculated on the average HEP value between 200–500 ms and the anxiety scores (Fieldtrip). To control for multiple comparisons, cluster based permutation (1000 permutations) was used in the temporal domain.
+
+
+This procedure was repeated 100 times, while keep count for each iteration if a significant effect was found. Figure X shows the percentage of correctly identified effects for each of the simulated associations between HEP and anxiety.
+  
+[m]
+
+
+First of all, we applied all 16 preprocessing pipelines described above to raw data. Second, for each of the pipelines, we computed the average HEP amplitude across a frontal cluster of electrodes (Cz, C3, C4, Fz, F3, F4, FC1, FC2) and a predefined time range (200-500 ms post-R-peak) that corresponded to our literature-based region of interest. These steps resulted in 16 average HEP values per subject. Third, we simulated anxiety values with correlation coefficients ranging from 0 to 0.5 in relation to average HEP values. For each of the simulated correlation coefficients from 0 to 0.5, we performed 100 simulations. In each of those, HEP resulting from one of 16 preprocessing pipelines was chosen randomly,[n][o][p][q] and anxiety values were generated with a specific correlation to it. Then, in each simulation, we performed mixed model analysis as described above on average values of HEP and simulated values of anxiety to determine if an effect could be considered significant given the 0.05 alpha level. 
+
+
+Power simulations
+
+
+  
+
+Example visualizations of results
+
+
+  
+
+
+
+Model specifications
+‘No controls’ specification (for average HEP and clustering on all space-time points of HEP):
+ 
+‘All controls’ specification (for average HEP and clustering on all space-time points of HEP):
+
+PCA specification (for average HEP and clustering on all space-time points of HEP):
+  
+‘Moderation’ specification (for 8 confounds, only for average HEP):
+ 
+‘Mediation’ specifications (check that first two are significant before proceeding to mediation analysis, only for average HEP):
+ 
+ 
+ 
+ 
+
+
+[a]Heart Beat Perception and Emotional Experience
+Rainer Schandry 1981
+[b]in Verdonk 2024, anxiety subjects are also defined based on GAD7 and starting from the score of 10
+[c]2024 already
+[d]add 50Hz notch filter
+[e]https://journals.lww.com/jonmd/abstract/1976/02000/central_and_peripheral_correlates_of_anxiety__a.3.aspx
+[f]We require authors to include an author contributions statement of their individual contributions to the paper -- such as experimental work, project planning, data analysis, etc (see the CRediT taxonomy for relevant contributor roles: https://casrai.org/credit/). The statement should be short, and refer to authors by their initials. For details please see the Authorship section of our joint Nature Research Editorial policies at http://www.nature.com/authors/editorial_policies/authorship.html
+[g]Figures
+You are encouraged to include Figures in the text or at the end of the protocol. Keep in mind that a total of 8 display elements (i.e., combination of Tables and Figures) is permitted in the final, Stage 2, submission. Figures/Tables that are not essential should be included in your Supplementary Information file. 
+Figure Legends
+Figure 1. Guidelines for the preparation of figure captions. Figure captions should be concise. Begin with a brief title and then describe what is presented in the figure and detail all relevant statistical information. If you show pilot data, list the N of each plot and report full statistics.
+[h]so we cant include exemplary figures (only maybe in supplements). Stage 1 should include only the figures that we want to have in stage 2 as well because we will only be allowed to write results and discussion. At last we can share example figures with example code
+[i]For reference tables: https://springernature.figshare.com/registered-reports_ncomms
+[j]we could also do this instead:
+1) run spatiotemporal clustering on t-tests for the difference between high and low anxiety groups, maybe even with matched subjects -> this will help us identify our data-driven ROI
+2) do all other MLM for the average within this ROI
+[k]Ensure that there is an exact correspondence between each scientific hypothesis and each statistical test. For example, it is not appropriate to write: Condition A will affect performance differently from Condition B. Instead, you must define the performance measure (e.g. Reaction Time) and the predicted direction of the difference. This would translate to, e.g.: Reaction times will be significantly higher in Condition A than Condition B.
+● If your analysis strategy will depend on the results (e.g. normal vs. non-normal distribution) then specify the contingencies for making different choices, i.e. IF-THEN statements.
+● You cannot interpret lack of evidence for the existence of an effect in NHST (e.g. a p>0.05 in a t-test) as evidence for the absence of an effect. To be able to interpret null results, you must commit to using Bayes Factors or equivalence testing.
+[l]two times same thing
+[m]Placeholder for final figure
+[n]or we performed pca on 16 HEP vectors and extracted PC explaining highest variance. Then we generated anxiety values associated with it and performed our planned analysis 100 to determine power for each of our hypotheses: 1abcd + 2ab.
+[o]therefore we still need to mention that we do clustering + split by anxiety groups. Each of those might result in different power - and we still need to compute power also. and also in different coefficient and hence equivalence bounds
+[p]also separate simulations for effects of pipeline on HEP-anxiety? It seems it is already sufficient to simulate anxiety association with one of 16 pipeline-specific HEP and then we can run models from both questions on it and look at their coefficients
+[q]for effects of a specific preprocessing step: maybe take average of all HEP relating to some preprocessing decision and then correlate anxiety

@@ -1,0 +1,20 @@
+# Exclude the old folder
+old/
+
+# MATLAB autosave files
+*.asv
+
+# MATLAB compiled files
+*.mex*
+*.p
+
+# Data files (if you want to exclude large data files)
+*.mat
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*~
+.vscode/
