@@ -7,6 +7,8 @@ suppressPackageStartupMessages({
   library(cowplot)
   library(R.matlab)
   library(fGarch)
+  library(tibble)
+  library(svglite)
 })
 
 set.seed(423) # Set seed for reproducibility
@@ -16,11 +18,11 @@ set.seed(423) # Set seed for reproducibility
 # ==============================================================================
 
 # File paths
-OUTPUT_DIR <- "/data/p_02865/data/ds003838/output/hep_anxiety_sim/"
+OUTPUT_DIR <- "/data/p_02865/data/ds003838/output/hep_anxiety_sim_test"
 PLOT_OUTPUT_DIR <- file.path(OUTPUT_DIR, "plots")
 CHAN_NAMES_DIR <- "/data/p_02865/code/supplement/orig_chan_labels.mat"
 BASE_DIR <- "/data/p_02865/data/ds003838/derivatives/"
-PCA_DATA_PATH <- file.path("/data/p_02865/code/pwr_simulations", "sim_res_reg.csv")
+PCA_DATA_PATH <- file.path("/data/p_02865/code/results", "sim_res_reg.csv")
 
 # Analysis parameters
 DEFAULT_SAMPLE_SIZE <- 3000
@@ -217,9 +219,12 @@ theme_power <- function(base_size = 8) {
 #' @param title_suffix Optional suffix for plot title
 #' @return ggplot object
 plot_power_by_effect <- function(data, title_suffix = "") {
-  ggplot(data, aes(x = mean_effect, y = power, color = analysis_type, linetype = analysis_type)) +
-    geom_line(size = 0.75) +
-    geom_point(size = 1.5, alpha = 0.8) +
+  # Use same color as n=3000 in PCA plots
+  line_color <- grey(0.2)
+  
+  ggplot(data, aes(x = mean_effect, y = power)) +
+    geom_line(size = 0.75, color = line_color) +
+    geom_point(size = 1.5, alpha = 0.8, color = line_color) +
     geom_hline(yintercept = 0.95, linetype = "dashed", alpha = 0.6, color = "grey50", size = 0.5) +
     scale_y_continuous(
       limits = c(0, 1),
@@ -229,16 +234,6 @@ plot_power_by_effect <- function(data, title_suffix = "") {
     scale_x_continuous(
       breaks = pretty,
       labels = function(x) sprintf("%.3f", x)
-    ) +
-    scale_color_manual(
-      name = "Analysis Type",
-      values = c("Continuous" = "#666666", "Grouped" = "#666666"),
-      labels = c("Continuous" = "Continuous Anxiety", "Grouped" = "Low vs High Groups")
-    ) +
-    scale_linetype_manual(
-      name = "Analysis Type", 
-      values = c("Continuous" = "solid", "Grouped" = "solid"),
-      labels = c("Continuous" = "Continuous Anxiety", "Grouped" = "Low vs High Groups")
     ) +
     labs(
       title = NULL,
@@ -278,9 +273,12 @@ plot_anxiety_histogram <- function(n_subjects = DEFAULT_SAMPLE_SIZE, rho = DEFAU
   # Generate correlated anxiety values
   anxiety_values <- generate_anxiety_corr(hep_values, rho)
   
+  # Color matching with legend
+  hist_color <- grey(0.2)
+  
   # Create histogram
   ggplot(data.frame(anxiety = anxiety_values), aes(x = anxiety)) +
-    geom_histogram(bins = 22, fill = "#666666", alpha = 0.7, color = "white", size = 0.2) +
+    geom_histogram(bins = 22, fill = hist_color, alpha = 0.7, color = "white", size = 0.2) +
     scale_x_continuous(
       breaks = seq(0, 21, 3),
       limits = c(0, 21)
@@ -346,8 +344,8 @@ plot_pca_individual <- function(pca_data, control_type) {
       labels = function(x) sprintf("%.2f", x)
     ) +
     scale_color_grey(
-      name = "Subjects",
-      start = 0.2, end = 0.8
+      name = "Participants",
+      start = 0.8, end = 0.2
     ) +
     labs(
       title = title_text,
@@ -422,7 +420,17 @@ main <- function() {
   
   # Create combined plot
   cat("Creating combined plot...\n")
-  combined_power <- plot_grid(
+  
+  # Extract legend from PCA plot and make it horizontal
+  legend <- get_legend(
+    p_pca_no + 
+      guides(color = guide_legend(nrow = 1)) +
+      theme(legend.position = "bottom",
+            legend.box.margin = margin(t = 0, r = 0, b = 0, l = 0))
+  )
+  
+  # Create main plot grid without legends
+  plot_grid_main <- plot_grid(
     p_hist + theme(legend.position = "none") + 
       labs(title = "A. Simulated GAD-7 Scores") + 
       theme(plot.title = element_text(hjust = 0)),
@@ -442,6 +450,21 @@ main <- function() {
     align = "hv",
     rel_widths = c(1, 1, 1),
     rel_heights = c(1, 1)
+  )
+  
+  # Create bottom row with empty spaces and legend in the middle
+  bottom_row <- plot_grid(
+    NULL, legend, NULL,
+    ncol = 3,
+    rel_widths = c(1, 1, 1)
+  )
+  
+  # Combine main plot with legend row
+  combined_power <- plot_grid(
+    plot_grid_main,
+    bottom_row,
+    ncol = 1,
+    rel_heights = c(1, 0.05)
   )
   
   # Save combined plots

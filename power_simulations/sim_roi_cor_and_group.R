@@ -412,10 +412,10 @@ n_iter <- 1000
 
 cat("Continuous anxiety analysis...\n")
 sim_results_continuous <- simulate_hep_anxiety(
-  rhos = c(0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.085, 0.09, 0.095, 0.1, 0.105, 0.11, 0.12, 0.13, 0.14, 0.15),
+  rhos = c(0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.085, 0.09, 0.095, 0.1, 0.105, 0.11, 0.12, 0.13, 0.14, 0.15, 0.16, 0.17, 0.18, 0.19, 0.2, 0.21, 0.22, 0.23, 0.24, 0.25, 0.26, 0.27, 0.28, 0.29, 0.3),
   anx_group = FALSE,
   n_iterations = n_iter,
-  sample_sizes = c(300),
+  sample_sizes = c(3000),
   equivalence_margin = 0.012,
   output_dir = output_dir
 )
@@ -428,11 +428,11 @@ cat("Continuous analysis saved!\n\n")
 
 cat("Grouped anxiety analysis...\n")
 sim_results_grouped <- simulate_hep_anxiety(
-  rhos = c(0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.085, 0.09, 0.095, 0.1, 0.105, 0.11, 0.12, 0.13, 0.14, 0.15),
+  rhos = c(0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.085, 0.09, 0.095, 0.1, 0.105, 0.11, 0.12, 0.13, 0.14, 0.15, 0.16, 0.17, 0.18, 0.19, 0.2, 0.21, 0.22, 0.23, 0.24, 0.25, 0.26, 0.27, 0.28, 0.29, 0.3),
   anx_group = TRUE,
   n_iterations = n_iter,
-  sample_sizes = c(300),
-  equivalence_margin = 0.19,
+  sample_sizes = c(3000),
+  equivalence_margin = 0.16,
   output_dir = output_dir
 )
 

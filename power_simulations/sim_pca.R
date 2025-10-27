@@ -170,8 +170,8 @@ for (sim_value in sim_values){
 sim_res["sig"] <- as.integer(sim_res["pval"]<0.05)
 
 # save the result of simulations
-save_path = "/data/p_02865/output/simulations/pca/"
-write.csv(sim_res, "sim_res_reg.csv", row.names=FALSE)
+save_path = "/data/p_02865/code/results"
+write.csv(sim_res, file.path(save_path, "sim_res_reg.csv"), row.names=FALSE)
 
 # visualise ####
 
