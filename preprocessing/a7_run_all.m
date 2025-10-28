@@ -11,7 +11,6 @@ scripts = {
     'a6_grand_avg_HEPs.m'
 };
 
-
 for i = 1:length(scripts)
     run(scripts{i});
 end

@@ -34,9 +34,12 @@ if isfield(EEG.event, 'item')
     EEG = eeg_checkset(EEG, 'eventconsistency');
 end
 
-% remove empty epochs
+% Check for empty epochs and throw error if found
 emptyEpochs = find(cellfun(@isempty,{EEG.epoch.event}));
-EEG = pop_select(EEG, 'notrial', emptyEpochs);
+if ~isempty(emptyEpochs)
+    error('Found %d empty epochs (indices: %s). This indicates a data processing issue that needs investigation...', ...
+          length(emptyEpochs), mat2str(emptyEpochs));
+end
 
 
 end
