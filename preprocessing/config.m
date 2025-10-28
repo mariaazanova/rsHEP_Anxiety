@@ -68,3 +68,11 @@ ignore_channel = {'Fp1', 'Fp2', 'F7', 'F8'};
 % region of interest for average HEP calculation
 electrodes = {'Cz', 'C3', 'C4', 'Fz', 'F3', 'F4', 'FC1', 'FC2'};
 time_range = [200, 500];
+
+% ICA settings
+% ICLabel probability thresholds for component rejection
+iclabel_threshold_muscle = 0.9;
+iclabel_threshold_eye = 0.9;
+iclabel_threshold_line_noise = 0.9;
+iclabel_threshold_channel_noise = 0.9;
+iclabel_threshold_other = 0.9;

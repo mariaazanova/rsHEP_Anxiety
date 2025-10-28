@@ -15,6 +15,7 @@ for ic = 1:length(ic_cutoffs)
             avg_HEP_local = nan(length(files), 1);
             HEP_all_local = cell(length(files), 1);
             ECG_all_local = cell(length(files), 1);
+            rejected_epochs_info = struct('subject', {}, 'n_total', {}, 'n_rejected', {}, 'percent_rejected', {});
 
             parfor i = 1:length(files)
                 try
@@ -63,14 +64,13 @@ for ic = 1:length(ic_cutoffs)
                         EEG = pop_rejepoch(EEG, bad_epoch_indices, 0);
                         EEG.reject.ptp.epochs = bad_epoch_indices;
                         EEG.reject.ptp.amplitudes = ptp_amplitudes;
-
-                        % Store rejection statistics
-                        rejected_epochs_info(i).subject = subjid;
-                        rejected_epochs_info(i).n_total = n_epochs_pre;
-                        rejected_epochs_info(i).n_rejected = length(bad_epoch_indices);
-                        rejected_epochs_info(i).percent_rejected = 100 * length(bad_epoch_indices) / n_epochs_pre;
-                
                     end
+                    
+                    % Store rejection statistics (always, even if no epochs rejected)
+                    rejected_epochs_info(i).subject = subjid;
+                    rejected_epochs_info(i).n_total = n_epochs_pre;
+                    rejected_epochs_info(i).n_rejected = length(bad_epoch_indices);
+                    rejected_epochs_info(i).percent_rejected = 100 * length(bad_epoch_indices) / n_epochs_pre;
 
                     %% remove all events not at latency 0 (we do not want 2 heartbeats in the same epoch)
                     EEG = remove_non_zero_events(EEG);
@@ -127,10 +127,12 @@ for ic = 1:length(ic_cutoffs)
 end
 
 % QA plots for rejected epochs
-figure;
-hist([rejected_epochs_info.percent_rejected], 20);
-title('Distribution of Rejected Epochs Percentage');
-xlabel('Percentage of Epochs Rejected');
-ylabel('Number of Subjects');
-saveas(gcf, [derivative_dir 'QA_rejected_epochs_distribution.png']);
-close;
+if exist('rejected_epochs_info', 'var') && ~isempty(rejected_epochs_info)
+    fig = figure('Visible', 'off');
+    hist([rejected_epochs_info.percent_rejected], 20);
+    title('Distribution of Rejected Epochs Percentage');
+    xlabel('Percentage of Epochs Rejected');
+    ylabel('Number of Subjects');
+    print(fig, [derivative_dir 'QA_rejected_epochs_distribution.png'], '-dpng', '-r150');
+    close(fig);
+end

@@ -56,7 +56,8 @@ for i = 1:length(hep_files)
 end
 
 % save avg frontal ROI HEP
-figure('Position', [100, 100, 800, 600]); hold on
+fig = figure('Visible', 'off', 'Position', [100, 100, 800, 600]); 
+hold on
 for plt = 1:size(grand_all_HEP,1)
     plot(EEG.times, grand_all_HEP(plt,:), 'DisplayName', ...
         sprintf('hp=%.1f bl=%s ic=%.1f', ...
@@ -66,5 +67,5 @@ legend('show', 'Location', 'northeastoutside','Interpreter', 'none');
 xlabel('time (ms)')
 ylabel('mikrovolt')
 title('Grand Average HEP over frontal electrodes')
-saveas(gcf, [outdir, 'frontal_all_HEP.png'],'png');
-close
+print(fig, [outdir, 'frontal_all_HEP.png'], '-dpng', '-r150');
+close(fig)

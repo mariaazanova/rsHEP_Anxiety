@@ -95,6 +95,9 @@ for hp = 1:length(hp_settings)
             EEG_ICA = pop_epoch(EEG_ICA, {hep_event_marker} , epoch_length);
             ECG = pop_epoch(ECG, {hep_event_marker} , epoch_length);
 
+            %% remove all events not at latency 0 (we do not want 2 heartbeats in the same epoch)
+            EEG = remove_non_zero_events(EEG);
+
             % %% remove some epochs for testing
             % EEG_ICA = pop_selectevent( EEG_ICA, 'event',[1:20] ,'deleteevents','off','deleteepochs','on','invertepochs','off');
 
@@ -112,12 +115,11 @@ for hp = 1:length(hp_settings)
             EEG_ICA = pop_iclabel(EEG_ICA, 'default');
 
             %Add above threshold component idx to data
-            EEG_ICA.etc.ic_remove.muscle = find(EEG_ICA.etc.ic_classification.ICLabel.classifications(:,2) >= 0.9);
-            EEG_ICA.etc.ic_remove.eye = find(EEG_ICA.etc.ic_classification.ICLabel.classifications(:,3) >= 0.9);
-            EEG_ICA.etc.ic_remove.LineNoise = find(EEG_ICA.etc.ic_classification.ICLabel.classifications(:,5) >= 0.9);
-            EEG_ICA.etc.ic_remove.ChannelNoise = find(EEG_ICA.etc.ic_classification.ICLabel.classifications(:,6) >= 0.9);
-            EEG_ICA.etc.ic_remove.other = find(EEG_ICA.etc.ic_classification.ICLabel.classifications(:,7) >= 0.9)
-
+            EEG_ICA.etc.ic_remove.muscle = find(EEG_ICA.etc.ic_classification.ICLabel.classifications(:,2) >= iclabel_threshold_muscle);
+            EEG_ICA.etc.ic_remove.eye = find(EEG_ICA.etc.ic_classification.ICLabel.classifications(:,3) >= iclabel_threshold_eye);
+            EEG_ICA.etc.ic_remove.LineNoise = find(EEG_ICA.etc.ic_classification.ICLabel.classifications(:,5) >= iclabel_threshold_line_noise);
+            EEG_ICA.etc.ic_remove.ChannelNoise = find(EEG_ICA.etc.ic_classification.ICLabel.classifications(:,6) >= iclabel_threshold_channel_noise);
+            EEG_ICA.etc.ic_remove.other = find(EEG_ICA.etc.ic_classification.ICLabel.classifications(:,7) >= iclabel_threshold_other);
 
             %% Save ICA EEG and corresponding ECG data
             pop_saveset(EEG_ICA, 'filename', [subjid, '_ica'], 'filepath', savepath);

@@ -129,6 +129,9 @@ for hp = 1:length(hp_settings)
             EEG = pop_epoch(EEG, {hep_event_marker}, epoch_length);
             ECG = pop_epoch(ECG, {hep_event_marker}, epoch_length);
       
+            %% remove all events not at latency 0 (we do not want 2 heartbeats in the same epoch)
+            EEG = remove_non_zero_events(EEG);
+
             % save pre-ICA data - removed baseline from filename
             filename = sprintf('%s_hp_%0.1f.set', subjid, hp_settings(hp));
             pop_saveset(EEG, 'filename', filename, 'filepath', savepath);
@@ -141,8 +144,10 @@ for hp = 1:length(hp_settings)
 
             %% Some QA Plots
             %pre-clean PSD
-            figure; plot_spec(EEG.data(1:length(all_chan_label),:)', 250, 'f_max',70);
-            saveas(gcf, [QA_save_path, '/', subjid, '_PSD_pre_ICA.png'],'png');
+            fig = figure('Visible', 'off'); 
+            plot_spec(EEG.data(1:length(all_chan_label),:)', 250, 'f_max',70);
+            print(fig, [QA_save_path, '/', subjid, '_PSD_pre_ICA.png'], '-dpng', '-r150');
+            close(fig);
 
             %% if loop completed and previously an error log was created, delete the error log
             if isfile([save_error, subjid, '_HEP_error_log.txt'])
