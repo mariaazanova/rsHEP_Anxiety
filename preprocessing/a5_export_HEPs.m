@@ -4,7 +4,8 @@
 run('config.m');
 
 %get files
-files = dir([datadir, 'sub*']);
+files = dir(datadir);
+files = files([files.isdir] & ~startsWith({files.name}, '.')); % subject folders only
 
 for ic = 1:length(ic_cutoffs)
     for hp = 1:length(hp_settings)
@@ -33,6 +34,7 @@ for ic = 1:length(ic_cutoffs)
                     eegpath = fullfile(files(i).folder, '/', files(i).name, '/eeg');
                     ecgpath = fullfile(files(i).folder, '/', files(i).name, '/ecg');
                     prep_eegpath = fullfile(files(i).folder, '/', files(i).name, '/prep');
+                    clean_path = fullfile(files(i).folder, files(i).name, 'clean');
                     HEP_path = fullfile(files(i).folder, '/', files(i).name, '/HEP/');
                     QA_save_path = fullfile(files(i).folder, '/', files(i).name, '/QA/');
 
@@ -41,7 +43,7 @@ for ic = 1:length(ic_cutoffs)
                     end
 
                     % load cleaned dataset
-                    EEG = pop_loadset('filename', prep_id_ica, 'filepath', prep_eegpath);
+                    EEG = pop_loadset('filename', prep_id_ica, 'filepath', clean_path);
                     ECG = pop_loadset('filename', prep_id_ica_ECG, 'filepath', prep_eegpath);
 
                     % apply baseline correction
@@ -57,11 +59,12 @@ for ic = 1:length(ic_cutoffs)
                     % amplitude thresholds
                     n_epochs_pre = EEG.trials;
 
-                    [~, ~, bad_epoch_indices, ptp_amplitudes] = pop_artmwppth_eeglab(EEG, 'Channel', incl_idx, 'Threshold', 200, 'Twindow', [-200 800], 'Windowsize', 200, 'Windowstep', 100, 'Review', 'off');
+                    [~, ~, bad_epoch_indices, ptp_amplitudes] = pop_artmwppth_eeglab(EEG, 'Channel', incl_idx, 'Threshold', p2p_threshold, 'Twindow', epoch_length * 1000, 'Windowsize', p2p_window_ms, 'Windowstep', p2p_step_ms, 'Review', 'off');
 
                     % remove the epochs
                     if ~isempty(bad_epoch_indices)
                         EEG = pop_rejepoch(EEG, bad_epoch_indices, 0);
+                        ECG = pop_rejepoch(ECG, bad_epoch_indices, 0);
                         EEG.reject.ptp.epochs = bad_epoch_indices;
                         EEG.reject.ptp.amplitudes = ptp_amplitudes;
                     end
@@ -71,6 +74,11 @@ for ic = 1:length(ic_cutoffs)
                     rejected_epochs_info(i).n_total = n_epochs_pre;
                     rejected_epochs_info(i).n_rejected = length(bad_epoch_indices);
                     rejected_epochs_info(i).percent_rejected = 100 * length(bad_epoch_indices) / n_epochs_pre;
+
+                    % minimum number of remaining epochs
+                    if EEG.trials < min_epochs
+                        error('Only %d epochs left after rejection (minimum %d)', EEG.trials, min_epochs);
+                    end
 
                     %% remove all events not at latency 0 (we do not want 2 heartbeats in the same epoch)
                     EEG = remove_non_zero_events(EEG);
@@ -90,8 +98,11 @@ for ic = 1:length(ic_cutoffs)
                     % Store average HEP (now using NaN as invalid marker)
                     avg_HEP_local(i) = mean(mean(meanHEP(chan_roi, time_roi)));
 
-                catch
-                    % Failed entries remain NaN
+                catch ME
+                    % Failed entries remain NaN -> the error per pipeline
+                    fileID = fopen([save_error, QA_save_id, '_HEP_error_log.txt'], 'w');
+                    fprintf(fileID, '%s\n', getReport(ME));
+                    fclose(fileID);
                 end
             end
 

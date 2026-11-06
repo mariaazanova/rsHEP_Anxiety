@@ -5,7 +5,8 @@
 run('config.m');
 
 %get files
-files = dir([datadir, 'sub*']);
+files = dir(datadir);
+files = files([files.isdir] & ~startsWith({files.name}, '.')); % subject folders only
 
 %cell array for preprocessed subject IDs
 prep_subjects = {}
@@ -29,27 +30,26 @@ for hp = 1:length(hp_settings)
             prep_eegpath = fullfile(files(i).folder, '/',files(i).name, '/prep');
 
             % output dir
-            savepath = [fullfile(files(i).folder, files(i).name, 'prep')];
+            savepath = fullfile(files(i).folder, files(i).name, 'ica');
+            if ~isfolder(savepath)
+                mkdir(savepath)
+            end
 
-            %% load RAW data - will be filtered at 1Hz and used for ICA
-            EEG_ICA = pop_loadset('filename', [files(i).name, '_task-rest_eeg.set'],'filepath',eegpath);
+            %% load RAW data - will be filtered at 1 Hz and used for ICA
+            % ECG is loaded raw again as the one from a1_preproc_data.m is already high-pass filtered and epoched
+            [EEG_ICA, ECG] = load_life_raw(subjid, raw_dirs, ecg_label, eog_labels, orig_chanlocs);
 
-            %ECG is epoched at the end of prep_a1 - hence applying a
-            %different HP filter might not be a good idea. Hence lets
-            %load the raw ECG again for the ICA processing
-            ECG = pop_loadset('filename', [files(i).name, '_task-rest_ecg.set'],'filepath',ecgpath);
-
-            %Keep only ECG channel
-            ecgIdx = find(contains({ECG.chanlocs.labels}, 'ECG'));
-            ECG = pop_select(ECG, 'channel', ecgIdx);
-
-            %% load  preprocessed dataset from subject
+            %% load preprocessed dataset from subject
             EEG = pop_loadset('filename', prep_id,'filepath', prep_eegpath);
 
             %% filter EEG
             %Low-Pass ICA filter
             EEG_ICA = pop_eegfiltnew(EEG_ICA, 'locutoff',0,'hicutoff',lp_settings, 'filtorder', [lp_filter_order], 'plotfreqz',0);
             ECG = pop_eegfiltnew(ECG, 'locutoff',0,'hicutoff',lp_settings, 'filtorder', [lp_filter_order],'plotfreqz',0);
+
+            %% Notch filter, identical to a1_preproc_data.m (before downsampling)
+            EEG_ICA = pop_eegfiltnew(EEG_ICA, 'locutoff',notch_band(1),'hicutoff',notch_band(2),'revfilt',1, 'filtorder', notch_filter_order,'plotfreqz',0);
+            ECG = pop_eegfiltnew(ECG, 'locutoff',notch_band(1),'hicutoff',notch_band(2),'revfilt',1, 'filtorder', notch_filter_order,'plotfreqz',0);
 
             %% downsample
             EEG_ICA = pop_resample(EEG_ICA, fs);
@@ -73,20 +73,16 @@ for hp = 1:length(hp_settings)
             EEG_ICA = pop_interp(EEG_ICA, chanlocs, 'spherical');
             eeg_checkset(EEG_ICA);
 
+            %% Average reference, identical to the target datasets in a1_preproc_data.m
+            EEG_ICA = pop_reref(EEG_ICA, []);
+
             %% High pass filter
-            EEG_ICA = pop_eegfiltnew(EEG_ICA, 'locutoff',1,'hicutoff',0, 'filtorder', [hp_filter_order(hp)],'plotfreqz',0);
-            ECG = pop_eegfiltnew(ECG, 'locutoff',1,'hicutoff',0, 'filtorder', [hp_filter_order(hp)],'plotfreqz',0);
-            
-            %% Notch filter
-            EEG_ICA = pop_eegfiltnew(EEG_ICA, 'locutoff',48, 'hicutoff',52,'revfilt',1,'plotfreqz',0);
-            ECG = pop_eegfiltnew(ECG, 'locutoff',48,'hicutoff',52,'revfilt',1,'plotfreqz',0);
+            EEG_ICA = pop_eegfiltnew(EEG_ICA, 'locutoff',ica_hp_cutoff,'hicutoff',0, 'filtorder', ica_hp_filter_order,'plotfreqz',0);
+            ECG = pop_eegfiltnew(ECG, 'locutoff',ica_hp_cutoff,'hicutoff',0, 'filtorder', ica_hp_filter_order,'plotfreqz',0);
 
-            %% Add ECG markers previously obtained and saved
-            % HEP_qrs = parload([ecgpath, '/', 'r_peak_onsets.mat']);
-
-            % detect R-peaks in ECG
-            HEP_qrs = heplab_slowdetect(ECG.data, ECG.srate);
-
+            %% Add R-peaks detected and IBI-cleaned in a1_preproc_data.m
+            HEP_qrs = parload([ecgpath, '/', 'r_peak_onsets.mat']);
+        
             EEG_ICA = fun_heplab_save_events(EEG_ICA, HEP_qrs, hep_event_marker);
             ECG = fun_heplab_save_events(ECG, HEP_qrs, hep_event_marker);
             eeg_checkset(EEG_ICA);
@@ -96,7 +92,7 @@ for hp = 1:length(hp_settings)
             ECG = pop_epoch(ECG, {hep_event_marker} , epoch_length);
 
             %% remove all events not at latency 0 (we do not want 2 heartbeats in the same epoch)
-            EEG = remove_non_zero_events(EEG);
+            EEG_ICA = remove_non_zero_events(EEG_ICA);
 
             % %% remove some epochs for testing
             % EEG_ICA = pop_selectevent( EEG_ICA, 'event',[1:20] ,'deleteevents','off','deleteepochs','on','invertepochs','off');
@@ -122,8 +118,9 @@ for hp = 1:length(hp_settings)
             EEG_ICA.etc.ic_remove.other = find(EEG_ICA.etc.ic_classification.ICLabel.classifications(:,7) >= iclabel_threshold_other);
 
             %% Save ICA EEG and corresponding ECG data
-            pop_saveset(EEG_ICA, 'filename', [subjid, '_ica'], 'filepath', savepath);
-            pop_saveset(ECG, 'filename', [subjid, '_ica_ECG'], 'filepath', savepath);
+            ica_id = sprintf('%s_hp_%0.1f_ica', subjid, hp_settings(hp));
+            pop_saveset(EEG_ICA, 'filename', [ica_id, '.set'], 'filepath', savepath);
+            pop_saveset(ECG, 'filename', [ica_id, '_ECG.set'], 'filepath', savepath);
 
             %list of all preprocessed subjects
             prep_subjects{i} = subjid;

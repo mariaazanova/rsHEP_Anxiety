@@ -5,7 +5,8 @@
 run('config.m');
 
 %% get files
-files = dir([datadir, 'sub*']);
+files = dir(datadir);
+files = files([files.isdir] & ~startsWith({files.name}, '.')); % subject folders only
 
 %% documentation
 prep_subjects = {};
@@ -31,17 +32,12 @@ for hp = 1:length(hp_settings)
             if ~isfolder(QA_save_path)
                 mkdir(QA_save_path)
             end
+            if ~isfolder(ecgpath)
+                mkdir(ecgpath)   
+            end
 
-            % load data       
-            EEG = pop_loadset('filename', [files(i).name, '_task-rest_eeg.set'], 'filepath', eegpath);
-            ECG = pop_loadset('filename', [files(i).name, '_task-rest_ecg.set'], 'filepath', ecgpath);
-            
-            % load channel locations
-            EEG = pop_chanedit(EEG, 'lookup', orig_chanlocs);
-            
-            %Keep only ECG channel
-            ecgIdx = find(contains({ECG.chanlocs.labels}, 'ECG'));
-            ECG = pop_select(ECG, 'channel', ecgIdx);
+            % load raw EEG and ECG
+            [EEG, ECG] = load_life_raw(subjid, raw_dirs, ecg_label, eog_labels, orig_chanlocs);
 
             %backup of ECG for HEPLAB - only downsampling, rest will be
             %done by heplab
@@ -52,12 +48,9 @@ for hp = 1:length(hp_settings)
             EEG = pop_eegfiltnew(EEG, 'locutoff',0,'hicutoff',lp_settings, 'filtorder', [lp_filter_order], 'plotfreqz',0);
             ECG = pop_eegfiltnew(ECG, 'locutoff',0,'hicutoff',lp_settings, 'filtorder', [lp_filter_order],'plotfreqz',0);
 
-            %EEG = pop_eegfilt(EEG, 0, 40, [lp_filter_order], 0, 0, 0, 'fir1', 0);
-            %ECG = pop_eegfilt(ECG, 0, 40, [lp_filter_order], 0, 0, 0, 'fir1', 0);
-
             % Notch filter
-            EEG = pop_eegfiltnew(EEG, 'locutoff',48,'hicutoff',52,'revfilt',1,'plotfreqz',0);
-            ECG = pop_eegfiltnew(ECG, 'locutoff',48,'hicutoff',52,'revfilt',1,'plotfreqz',0);
+            EEG = pop_eegfiltnew(EEG, 'locutoff',notch_band(1),'hicutoff',notch_band(2),'revfilt',1, 'filtorder', notch_filter_order,'plotfreqz',0);
+            ECG = pop_eegfiltnew(ECG, 'locutoff',notch_band(1),'hicutoff',notch_band(2),'revfilt',1, 'filtorder', notch_filter_order,'plotfreqz',0);
 
             % downsample
             EEG = pop_resample(EEG, fs);
@@ -82,8 +75,8 @@ for hp = 1:length(hp_settings)
             % store removed channels in EEG struct
             EEG.reject.removed_channels = all_chan_label(~ismember(all_chan_label , {EEG.chanlocs.labels}));
 
-            % exclude subject if >50% channels removed
-            if numel(EEG.reject.removed_channels) >= numel(all_chan_label) / 2
+            % exclude subject if more than max_bad_chan_frac of channels removed
+            if numel(EEG.reject.removed_channels) > max_bad_chan_frac * numel(all_chan_label)
                 fileID = fopen([save_error, subjid, '_removed_channel_log.txt'], 'w');
                 fprintf(fileID, '%6s\n', subjid);
                 fprintf(fileID, '%6s', num2str(numel(EEG.reject.removed_channels)), ' removed channel');
@@ -105,10 +98,11 @@ for hp = 1:length(hp_settings)
             % ecgIdx = find(contains({ECG.chanlocs.labels}, 'ECG'));
             % ECG = pop_select(ECG, 'channel', ecgIdx);
 
-            % Exclude heartbeats with an inter-beat interval less than 500 ms
-            IBI = diff(HEP_qrs); 
-            valid_beats = [true; IBI >= min_ibi * fs]; 
-            HEP_qrs = HEP_qrs(valid_beats);  
+            % Exclude both heartbeats of any pair with an inter-beat interval < min_ibi
+            IBI = diff(HEP_qrs(:));
+            short_ibi = IBI < min_ibi * fs;
+            drop_beats = [short_ibi; false] | [false; short_ibi];
+            HEP_qrs = HEP_qrs(~drop_beats);
 
              % save events to EEG and ECG set
             EEG = fun_heplab_save_events(EEG, HEP_qrs, hep_event_marker);
