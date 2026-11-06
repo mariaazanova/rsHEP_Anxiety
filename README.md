@@ -1,0 +1,1 @@
+Here we deposit the code used for the following registered report: Azanova, M., Steinfath, T. P., Kapralov, N., Hensch, T., Nikulin, V. V., & Villringer, A. (2026, October 25). Resting-State Heartbeat-Evoked Potential as a Trait in Anxiety. https://doi.org/10.17605/OSF.IO/UK89D
