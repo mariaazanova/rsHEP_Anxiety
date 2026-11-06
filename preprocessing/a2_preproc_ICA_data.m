@@ -69,16 +69,16 @@ for hp = 1:length(hp_settings)
                 rmChan = 0;
             end
 
+            %% High pass filter
+            EEG_ICA = pop_eegfiltnew(EEG_ICA, 'locutoff',ica_hp_cutoff,'hicutoff',0, 'filtorder', ica_hp_filter_order,'plotfreqz',0);
+            ECG = pop_eegfiltnew(ECG, 'locutoff',ica_hp_cutoff,'hicutoff',0, 'filtorder', ica_hp_filter_order,'plotfreqz',0);
+
             %% Interpolate
             EEG_ICA = pop_interp(EEG_ICA, chanlocs, 'spherical');
             eeg_checkset(EEG_ICA);
 
             %% Average reference, identical to the target datasets in a1_preproc_data.m
             EEG_ICA = pop_reref(EEG_ICA, []);
-
-            %% High pass filter
-            EEG_ICA = pop_eegfiltnew(EEG_ICA, 'locutoff',ica_hp_cutoff,'hicutoff',0, 'filtorder', ica_hp_filter_order,'plotfreqz',0);
-            ECG = pop_eegfiltnew(ECG, 'locutoff',ica_hp_cutoff,'hicutoff',0, 'filtorder', ica_hp_filter_order,'plotfreqz',0);
 
             %% Add R-peaks detected and IBI-cleaned in a1_preproc_data.m
             HEP_qrs = parload([ecgpath, '/', 'r_peak_onsets.mat']);
