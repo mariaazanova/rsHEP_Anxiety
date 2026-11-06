@@ -6,13 +6,15 @@
 run('config.m');
 
 %get files
-files = dir([datadir, 'sub*']);
+files = dir(datadir);
+files = files([files.isdir] & ~startsWith({files.name}, '.')); % subject folders only
 
-%matrix for correlation of ICA components with ECG
-EEG_ICA_Corr = [];
+for hp = 1:length(hp_settings)
+hp_label = sprintf('hp_%0.1f', hp_settings(hp));
 
-%struct for successfully processed subjects
-prep_subjects = {};
+%correlation of ICA components with ECG, per subject
+EEG_ICA_Corr = {};
+subj_ids = {};
 
 counter = 1;
 for i=1:length(files)
@@ -26,11 +28,12 @@ for i=1:length(files)
         subj_folder = fullfile(files(i).folder, '/',files(i).name, '/');
         eegpath = fullfile(files(i).folder, '/',files(i).name, '/eeg');
         ecgpath = fullfile(files(i).folder, '/',files(i).name, '/ecg');
-        prep_eegpath = fullfile(files(i).folder, '/',files(i).name, '/prep');
+        ica_path = fullfile(files(i).folder, files(i).name, 'ica');
 
         %% load ICA data
-        EEG_ICA = pop_loadset('filename', [subjid, '_ica.set'],'filepath',prep_eegpath);
-        ECG = pop_loadset('filename', [subjid, '_ica_ECG.set'], 'filepath', prep_eegpath);
+        ica_id = sprintf('%s_%s_ica', subjid, hp_label);
+        EEG_ICA = pop_loadset('filename', [ica_id, '.set'],'filepath',ica_path);
+        ECG = pop_loadset('filename', [ica_id, '_ECG.set'], 'filepath', ica_path);
 
         % %% identify heart components based on correlation with ECG
         %get a template of the ECG to match with IC time courses
@@ -39,7 +42,7 @@ for i=1:length(files)
         %Select ICA components based on ECG template - SDcrit (1.5) would
         %plot components that have a corrlation with the ECG which is >1.5 standard deviations
         %above the mean correlation across all components. Just for QA 
-        [EEG, cV, rejV] = ecg_ica_corr(EEG_ICA,ECG_template, [-0.050 0.400], hep_event_marker, 1.5);
+        [~, cV] = ecg_ica_corr(EEG_ICA, ECG_template, cfa_corr_window, hep_event_marker, 1.5);
 
         %store ECG ICA correlation in matrix and save it
         EEG_ICA_Corr{counter} = cV;
@@ -56,35 +59,35 @@ for i=1:length(files)
 
     catch ME
 
-        fileID = fopen([save_error, subjid, '_remICA_error_log.txt'],'w');
-        fprintf(fileID,'%6s\n',subjid);
-        fprintf(fileID,'%6s\n',getReport(ME));
+        fileID = fopen([save_error, subjid, '_', hp_label, '_ICAcutoff_error_log.txt'], 'w');
+        fprintf(fileID, '%s\n', getReport(ME));
         fclose(fileID);
     end
 
 end
 
-save([datadir, 'EEG_ICA_Corr.mat'], 'EEG_ICA_Corr')
+save([datadir, 'EEG_ICA_Corr_', hp_label, '.mat'], 'EEG_ICA_Corr')
 
 % Compute cutoff values for each target number of ICs
 cutoff_values = struct();
+cutoff_sd = struct();
 for i = 1:length(target_ICs_removed)
     if target_ICs_removed(i) > 0  
         
         % cutoff label
-        cutoff_label = sprintf('cutoff_value_%d_%d', ...
-            floor(target_ICs_removed(i)), ...
-            round(10 * mod(target_ICs_removed(i), 1)));
+        cutoff_label = strrep(sprintf('cutoff_value_%.1f', target_ICs_removed(i)), '.', '_'); % 1.5 -> 'cutoff_value_1_5'
         
-        cutoff_values.(cutoff_label) = compute_cutoff_SDper_subj_bin(EEG_ICA_Corr, ...
-            target_ICs_removed(i), target_ICs_removed(i), 0.2);
+        [cutoff_values.(cutoff_label), cutoff_sd.(cutoff_label)] = compute_cutoff_SD_per_subj( ...
+            EEG_ICA_Corr, cfa_start_sd(i), target_ICs_removed(i), cfa_tolerance);
                 
         % Save individual cutoff file
         cutoff_data = cutoff_values.(cutoff_label);
-        save([datadir, 'EEG_ICA_', cutoff_label, '.mat'],  'cutoff_data');
+        save([datadir, 'EEG_ICA_', cutoff_label, '_', hp_label, '.mat'],  'cutoff_data');
     end
 end
 
 % Save all cutoffs and subject IDs in one file
-save([datadir, 'EEG_ICA_cutoffs.mat'], 'cutoff_values');
-save([datadir, 'EEG_ICA_cutoff_subj_ids.mat'], 'subj_ids');
+save([datadir, 'EEG_ICA_cutoffs_', hp_label, '.mat'], 'cutoff_values', 'cutoff_sd');
+save([datadir, 'EEG_ICA_cutoff_subj_ids_', hp_label, '.mat'], 'subj_ids');
+
+end

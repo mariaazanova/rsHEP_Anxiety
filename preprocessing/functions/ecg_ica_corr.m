@@ -16,8 +16,7 @@ function [EEG, cV, rejV] = ecg_ica_corr(EEG, ECG_template, time_window, R_marker
 
 EEGtemp = EEG;
 
-%in eeglab, option to recompute icaact needs to be "on"
-pop_editoptions('option_computeica', 1)
+%icaact is recomputed by eeg_checkset; option_computeica is set to 1 in config.m
 EEGtemp = eeg_checkset(EEGtemp)
 
 %overwrite the EEG data with the ICA time data for easier epoching / data
@@ -53,8 +52,9 @@ if isempty(ECG_template)
     end
 end
 
-%Correlate with the ECG template
-cV  = abs(corr(avgIC',ECG_template')); 
+%Correlate with the ECG template now also restricted to time window of interest
+tw_idx = EEGtemp.times >= time_window(1)*1000 & EEGtemp.times <= time_window(2)*1000; % times in ms, window in s
+cV  = abs(corr(avgIC(:, tw_idx)', ECG_template(tw_idx)'));
 
 %obtain threshold
 corthreshV = mean(cV)+ SDcrit * std(cV); 

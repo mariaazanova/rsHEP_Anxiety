@@ -78,6 +78,9 @@ end
 
 % Artifact rejection process
 max_ptp = zeros(1, EEG.trials);  % Initialize array to store max ptp amplitude for each epoch
+% start from clean flags so that marks stored in the dataset are not counted as rejections
+EEG.reject.rejmanual  = false(1, EEG.trials);
+EEG.reject.rejmanualE = false(EEG.nbchan, EEG.trials);
 for ch = 1:length(chanArray)
     chan = chanArray(ch);
     for epoch = 1:EEG.trials

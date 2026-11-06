@@ -9,8 +9,9 @@ hep_files = dir([derivative_dir, '*all_HEP.mat*'])
 ecg_files = dir([derivative_dir, '*all_ECG.mat*'])
 
 % load single dataset just for layout and time vector
-% Update example filename to match new naming convention
-EEG = pop_loadset('filename', 'sub-052_hp_0.5_ic_3.5.set', 'filepath', '/data/p_02865/data/ds003838/sub-052/prep/');
+% any cleaned dataset of this run works as the template
+tmpl = dir(fullfile(datadir, '*', 'clean', '*_hp_0.5_ic_3.5.set'));
+EEG = pop_loadset('filename', tmpl(1).name, 'filepath', tmpl(1).folder);
 
 %% region of interest
 electrodes = {'Cz', 'C3', 'C4', 'Fz', 'F3', 'F4', 'FC1', 'FC2'}
