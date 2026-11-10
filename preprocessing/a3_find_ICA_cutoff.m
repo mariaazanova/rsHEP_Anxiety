@@ -13,11 +13,10 @@ for hp = 1:length(hp_settings)
 hp_label = sprintf('hp_%0.1f', hp_settings(hp));
 
 %correlation of ICA components with ECG, per subject
-EEG_ICA_Corr = {};
-subj_ids = {};
+EEG_ICA_Corr = cell(1, length(files));
+subj_ids = cell(1, length(files));
 
-counter = 1;
-for i=1:length(files)
+parfor i=1:length(files)
 
     try
 
@@ -45,9 +44,8 @@ for i=1:length(files)
         [~, cV] = ecg_ica_corr(EEG_ICA, ECG_template, cfa_corr_window, hep_event_marker, 1.5);
 
         %store ECG ICA correlation in matrix and save it
-        EEG_ICA_Corr{counter} = cV;
-        subj_ids{counter} = subjid;
-        counter = counter+1;
+        EEG_ICA_Corr{i} = cV;
+        subj_ids{i} = subjid;
 
         %List of subjects
 
@@ -65,6 +63,11 @@ for i=1:length(files)
     end
 
 end
+
+% keep only subjects that loaded successfully - otherwise threshold computation might fail
+ok = ~cellfun(@isempty, subj_ids);
+EEG_ICA_Corr = EEG_ICA_Corr(ok);
+subj_ids = subj_ids(ok);
 
 save([datadir, 'EEG_ICA_Corr_', hp_label, '.mat'], 'EEG_ICA_Corr')
 
