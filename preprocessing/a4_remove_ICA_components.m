@@ -29,6 +29,7 @@ for ic = 1:length(ic_cutoffs)
                 subjid = files(i).name;
                 prep_id = sprintf('%s_hp_%0.1f.set', subjid, hp_settings(hp));
                 QA_save_id = sprintf('%s_hp_%0.1f_ic_%0.1f', subjid, hp_settings(hp), ic_cutoffs(ic));
+                hp_save_id = sprintf('%s_hp_%0.1f', subjid, hp_settings(hp)); % for QA plots that don't depend on the IC cutoff
 
                 % Subject specific folders
                 subj_folder = fullfile(files(i).folder, '/', files(i).name, '/');
@@ -41,9 +42,6 @@ for ic = 1:length(ic_cutoffs)
                     mkdir(clean_path)
                 end
                 QA_save_path = fullfile(files(i).folder, '/', files(i).name, '/QA', '/');
-
-                % Load RAW data - only for QA PSD
-                EEG_RAW = load_life_raw(subjid, raw_dirs, ecg_label, eog_labels, orig_chanlocs);
 
                 % Load ICA data
                 ica_id = sprintf('%s_hp_%0.1f_ica', subjid, hp_settings(hp));
@@ -110,29 +108,30 @@ for ic = 1:length(ic_cutoffs)
 
                 %Plot spectogram
                 figure; plot_spec(EEGclean.data(1:end,:)', EEGclean.srate, 'f_max',70);
-                % pause(2); 
                 saveas(gcf, [QA_save_path, QA_save_id, '_PSD_post_ICA.png'],'png');
 
-                %pre-clean PSD
-                figure; plot_spec(EEG.data(1:end,:)', EEG.srate, 'f_max',70);
-                pause(2); 
-                saveas(gcf, [QA_save_path,QA_save_id, '_PSD_pre_ICA.png'],'png');
+                %pre-clean PSD - same for all IC cutoffs, only once per hp
+                if ic == 1
+                    figure; plot_spec(EEG.data(1:end,:)', EEG.srate, 'f_max',70);
+                    saveas(gcf, [QA_save_path, hp_save_id, '_PSD_pre_ICA.png'],'png');
+                end
 
-                %raw PSD
-                figure; plot_spec(EEG_RAW.data(1:end,:)', EEG.srate, 'f_max',70);
-                pause(2); 
-                saveas(gcf, [QA_save_path,QA_save_id, '_PSD_raw.png'],'png');
+                %raw PSD - same for all conditions, only once per subject
+                if ic == 1 && hp == 1
+                    EEG_RAW = load_life_raw(subjid, raw_dirs, ecg_label, eog_labels, orig_chanlocs);
+                    figure; plot_spec(EEG_RAW.data(1:end,:)', EEG_RAW.srate, 'f_max',70);
+                    saveas(gcf, [QA_save_path, subjid, '_PSD_raw.png'],'png');
+                end
 
                 %plot removed components
                 pop_topoplot(EEG_ICA, 0, reject ,subjid,[] ,0,'electrodes','on','iclabel', 'on', 'iclabel', 'on');
-                pause(1); 
                 saveas(gcf, [QA_save_path,  QA_save_id, '_removed_components.png'],'png');
 
-                %plot all components
-                pop_topoplot(EEG_ICA, 0, 1:size(EEG_ICA.icaweights, 1), subjid, [], 0, 'electrodes', 'on', 'iclabel', 'on');
-                pause(5); 
-
-                saveas(gcf, [QA_save_path, QA_save_id, '_all_components.png'],'png');
+                %plot all components - same for all IC cutoffs, only once per hp
+                if ic == 1
+                    pop_topoplot(EEG_ICA, 0, 1:size(EEG_ICA.icaweights, 1), subjid, [], 0, 'electrodes', 'on', 'iclabel', 'on');
+                    saveas(gcf, [QA_save_path, hp_save_id, '_all_components.png'],'png');
+                end
 
                 %plot artefact components that have high probability to be brain
                 %activity
