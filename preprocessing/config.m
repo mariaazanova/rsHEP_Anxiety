@@ -15,6 +15,7 @@ deriv_root = '/data/p_02865/data/LIFE/derivatives/';
 datadir = [deriv_root, 'preprocessing/'];         
 save_error = [deriv_root, 'logs/'];
 derivative_dir = [deriv_root, 'group/'];
+cutoff_dir = [derivative_dir, 'ica_cutoffs/']; 
 outdir = [deriv_root, 'output/'];
 
 %ECG and EOG channel labels in the raw data

@@ -16,9 +16,9 @@ for ic = 1:length(ic_cutoffs)
 
         % Load IC cutoffs for this high-pass level
         hp_label = sprintf('hp_%0.1f', hp_settings(hp));
-        S = load([datadir, 'EEG_ICA_cutoffs_', hp_label, '.mat']);
+        S = load([cutoff_dir, 'EEG_ICA_cutoffs_', hp_label, '.mat']);
         cutoff_values = S.cutoff_values;
-        S = load([datadir, 'EEG_ICA_cutoff_subj_ids_', hp_label, '.mat']);
+        S = load([cutoff_dir, 'EEG_ICA_cutoff_subj_ids_', hp_label, '.mat']);
         subj_ids = S.subj_ids;
 
         parfor i = 1:length(files)

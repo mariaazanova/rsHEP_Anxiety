@@ -4,6 +4,7 @@
 
 % Load configuration & settings
 run('config.m');
+if ~isfolder(cutoff_dir), mkdir(cutoff_dir); end
 
 %get files
 files = dir(datadir);
@@ -69,7 +70,7 @@ ok = ~cellfun(@isempty, subj_ids);
 EEG_ICA_Corr = EEG_ICA_Corr(ok);
 subj_ids = subj_ids(ok);
 
-save([datadir, 'EEG_ICA_Corr_', hp_label, '.mat'], 'EEG_ICA_Corr')
+save([cutoff_dir, 'EEG_ICA_Corr_', hp_label, '.mat'], 'EEG_ICA_Corr')
 
 % Compute cutoff values for each target number of ICs
 cutoff_values = struct();
@@ -85,12 +86,12 @@ for i = 1:length(target_ICs_removed)
                 
         % Save individual cutoff file
         cutoff_data = cutoff_values.(cutoff_label);
-        save([datadir, 'EEG_ICA_', cutoff_label, '_', hp_label, '.mat'],  'cutoff_data');
+        save([cutoff_dir, 'EEG_ICA_', cutoff_label, '_', hp_label, '.mat'],  'cutoff_data');
     end
 end
 
 % Save all cutoffs and subject IDs in one file
-save([datadir, 'EEG_ICA_cutoffs_', hp_label, '.mat'], 'cutoff_values', 'cutoff_sd');
-save([datadir, 'EEG_ICA_cutoff_subj_ids_', hp_label, '.mat'], 'subj_ids');
+save([cutoff_dir, 'EEG_ICA_cutoffs_', hp_label, '.mat'], 'cutoff_values', 'cutoff_sd');
+save([cutoff_dir, 'EEG_ICA_cutoff_subj_ids_', hp_label, '.mat'], 'subj_ids');
 
 end
