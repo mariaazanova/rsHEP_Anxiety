@@ -20,7 +20,7 @@ ECG = pop_select(EEG, 'channel', ecg_idx);
 ECG.chanlocs(1).labels = 'ECG';
 
 % EEG: drop ECG and EOG channels, look up channel locations
-drop = ismember({EEG.chanlocs.labels}, [{ecg_label}, eog_labels]);
+drop = ismember({EEG.chanlocs.labels}, [{ecg_label}, eog_labels, {'nase'}]);
 EEG = pop_select(EEG, 'nochannel', find(drop));
 EEG = pop_chanedit(EEG, 'lookup', chanlocs);
 end
