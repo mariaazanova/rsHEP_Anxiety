@@ -18,3 +18,4 @@ Thumbs.db
 # Editor files
 *~
 .vscode/
+.Rhistory
