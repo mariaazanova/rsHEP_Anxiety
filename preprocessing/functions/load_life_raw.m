@@ -23,7 +23,8 @@ ECG = pop_select(EEG, 'channel', ecg_idx);
 ECG.chanlocs(1).labels = 'ECG';
 
 % EEG: drop ECG and EOG channels, look up channel locations
-drop = ismember({EEG.chanlocs.labels}, [{ecg_label}, eog_labels, {'nase'}]);
+% extra non-EEG channels in single recordings ('nase'; FzTemp/FronOkz/MastTemp in one ESF file)
+drop = ismember({EEG.chanlocs.labels}, [{ecg_label}, eog_labels, {'nase', 'FzTemp', 'FronOkz', 'MastTemp'}]);
 EEG = pop_select(EEG, 'nochannel', find(drop));
 
 % some ESF recordings label FT9/FT10 as T1/T2
