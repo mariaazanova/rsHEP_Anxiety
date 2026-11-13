@@ -82,6 +82,14 @@ corrected_stem <- stem
 corrected_stem <- sub("(?i)_(Ruhen|Ruihe)$", "_Ruhe", stem, perl = TRUE)
 missing_ruhe <- grepl("(?i)^LI[0-9]+[A-Z]?$", corrected_stem, perl = TRUE)
 corrected_stem[missing_ruhe] <- paste0(corrected_stem[missing_ruhe], "_Ruhe")
+# Normalize recording numbers appearing before "_Ruhe"
+# (e.g., "_2_Ruhe" -> "_Ruhe_2").
+corrected_stem <- sub(
+  "(?i)_([0-9]+)_Ruhe$",
+  "_Ruhe_\\1",
+  corrected_stem,
+  perl = TRUE
+)
 known_typo <- stem != corrected_stem
 no_li <- grepl("(?i)^[0-9]+[A-Z]?_Ruhe(?:_[0-9]+)?$", corrected_stem, perl = TRUE)
 recognized <- grepl("(?i)^LI[A-Z0-9_-]+_Ruhe(?:_[0-9]+)?$",
