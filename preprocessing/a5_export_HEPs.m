@@ -7,6 +7,8 @@ run('config.m');
 files = dir(datadir);
 files = files([files.isdir] & ~startsWith({files.name}, '.')); % subject folders only
 
+create_dirs({derivative_dir, [qa_dir, 'epoch_rejection/'], [qa_dir, 'valid_subjects/']});
+
 for ic = 1:length(ic_cutoffs)
     for hp = 1:length(hp_settings)
 
@@ -14,16 +16,22 @@ for ic = 1:length(ic_cutoffs)
         
             % Initialize local variables with NaNs for parfor
             avg_HEP_local = nan(length(files), 1);
+            avg_ECG_local = nan(length(files), 1);
             HEP_all_local = cell(length(files), 1);
             ECG_all_local = cell(length(files), 1);
-            rejected_epochs_info = struct('subject', {}, 'n_total', {}, 'n_rejected', {}, 'percent_rejected', {});
+            n_total_local = nan(length(files), 1);     
+            n_rejected_local = nan(length(files), 1);  
+
+            % construct name
+            if isempty(baseline{bl}), bl_label = 'none'; else, bl_label = sprintf('%d_%d', baseline{bl}); end
+            cond_id = sprintf('hp_%0.1f_bl_%s_ic_%0.1f', hp_settings(hp), bl_label, ic_cutoffs(ic));
 
             parfor i = 1:length(files)
                 try
 
                     % Get subjid
                     subjid = files(i).name;
-                    QA_save_id = sprintf('%s_hp_%0.1f_bl_%s_ic_%0.1f', subjid, hp_settings(hp), mat2str(baseline{bl}), ic_cutoffs(ic));
+                    QA_save_id = [subjid, '_', cond_id];
                     
                     % Load ICA-cleaned data (without baseline in filename)
                     prep_id_ica = sprintf('%s_hp_%0.1f_ic_%0.1f.set', subjid, hp_settings(hp), ic_cutoffs(ic));
@@ -69,11 +77,9 @@ for ic = 1:length(ic_cutoffs)
                         EEG.reject.ptp.amplitudes = ptp_amplitudes;
                     end
                     
-                    % Store rejection statistics (always, even if no epochs rejected)
-                    rejected_epochs_info(i).subject = subjid;
-                    rejected_epochs_info(i).n_total = n_epochs_pre;
-                    rejected_epochs_info(i).n_rejected = length(bad_epoch_indices);
-                    rejected_epochs_info(i).percent_rejected = 100 * length(bad_epoch_indices) / n_epochs_pre;
+                    % Store rejection statistics 
+                    n_total_local(i) = n_epochs_pre;
+                    n_rejected_local(i) = length(bad_epoch_indices);
 
                     % minimum number of remaining epochs
                     if EEG.trials < min_epochs
@@ -96,7 +102,22 @@ for ic = 1:length(ic_cutoffs)
                     time_roi = EEG.times >= time_range(1) & EEG.times <= time_range(2);
 
                     % Store average HEP (now using NaN as invalid marker)
-                    avg_HEP_local(i) = mean(mean(meanHEP(chan_roi, time_roi)));
+                    roi_HEP = mean(mean(meanHEP(chan_roi, time_roi)));
+                    avg_HEP_local(i) = roi_HEP;
+
+                    % average ECG in the same time window as the HEP ROI
+                    if ~isequal(ECG.times, EEG.times)
+                        error('ECG and EEG epoch time vectors differ');
+                    end
+                    roi_ECG = mean(meanECG(1, time_roi));
+                    avg_ECG_local(i) = roi_ECG;
+
+                    % subject wise average HEP/ECG for this condition
+                    subj_HEP = struct('meanHEP', meanHEP, 'meanECG', meanECG, 'times', EEG.times, ...
+                        'chanlabels', {{EEG.chanlocs.labels}}, 'roi_HEP', roi_HEP, 'roi_ECG', roi_ECG, ...
+                        'n_epochs_total', n_epochs_pre, 'n_epochs_rejected', length(bad_epoch_indices), ...
+                        'n_epochs_kept', size(EEG.data, 3));
+                    parsave([HEP_path, subjid, '_', cond_id, '_avgHEP.mat'], subj_HEP);
 
                 catch ME
                     % Failed entries remain NaN -> the error per pipeline
@@ -108,17 +129,38 @@ for ic = 1:length(ic_cutoffs)
 
             % Remove invalid entries using NaN check
             valid_idx = ~isnan(avg_HEP_local);
+
+            % epoch rejection per subject for this condition
+            has_data = ~isnan(n_total_local);
+            rej_table = table({files(has_data).name}', n_total_local(has_data), n_rejected_local(has_data), ...
+                n_total_local(has_data) - n_rejected_local(has_data), valid_idx(has_data), ...
+                'VariableNames', {'subject_id', 'n_total', 'n_rejected', 'n_kept', 'included'});
+            writetable(rej_table, [qa_dir, 'epoch_rejection/', cond_id, '_epoch_rejection.csv']);
+
+            % QA: distribution of rejected epochs for this condition
+            fig = figure('Visible', 'off');
+            histogram(100 * rej_table.n_rejected ./ rej_table.n_total, 20);
+            title(strrep(cond_id, '_', ' ')); xlabel('% epochs rejected'); ylabel('Number of subjects');
+            print(fig, [qa_dir, 'epoch_rejection/', cond_id, '_QA_rejected_epochs.png'], '-dpng', '-r150');
+            close(fig);
             avg_HEP_local = avg_HEP_local(valid_idx);
+            avg_ECG_local = avg_ECG_local(valid_idx);
 
             % Get and save valid subject IDs
             all_subject_ids = {files.name};
             valid_subject_ids = all_subject_ids(valid_idx);
-            valid_subjects_file = sprintf('hp_%0.1f_bl_%s_ic_%0.1f_valid_subjects.txt', hp_settings(hp), mat2str(baseline{bl}), ic_cutoffs(ic));
-            full_path = [derivative_dir valid_subjects_file];
+            valid_subjects_file = [cond_id, '_valid_subjects.txt'];
+            full_path = [qa_dir, 'valid_subjects/', valid_subjects_file];
             writecell(valid_subject_ids', full_path, 'Delimiter', 'tab');
 
             % Convert tabs to newlines using system command
             system(['sed -i "s/\t/\n/g" "' full_path '"']);
+
+            % ROI-average HEP per valid subject (same subject order as HEP_all)
+            roi_table = table(valid_subject_ids', avg_HEP_local, avg_ECG_local, n_total_local(valid_idx), ...
+                n_rejected_local(valid_idx), n_total_local(valid_idx) - n_rejected_local(valid_idx), ...
+                'VariableNames', {'subject_id', 'roi_HEP', 'roi_ECG', 'n_epochs_total', 'n_epochs_rejected', 'n_epochs_kept'});
+            writetable(roi_table, [derivative_dir, cond_id, '_roi_HEP.csv']);
 
             % Use same valid indices for HEP and ECG data
             HEP_all_local = HEP_all_local(valid_idx);
@@ -127,23 +169,13 @@ for ic = 1:length(ic_cutoffs)
             ECG_all = cat(3, ECG_all_local{:});
 
             % Save with baseline info in filename
-            all_hep_id = sprintf('hp_%0.1f_bl_%s_ic_%0.1f_all_HEP.mat', hp_settings(hp), mat2str(baseline{bl}), ic_cutoffs(ic));      
-            all_ecg_id = sprintf('hp_%0.1f_bl_%s_ic_%0.1f_all_ECG.mat', hp_settings(hp), mat2str(baseline{bl}), ic_cutoffs(ic));      
+            all_hep_id = [cond_id, '_all_HEP.mat'];
+            all_ecg_id = [cond_id, '_all_ECG.mat'];
 
-            save([derivative_dir, all_hep_id], 'HEP_all');
-            save([derivative_dir, all_ecg_id], 'ECG_all');
+            subject_ids = valid_subject_ids';
+            save([derivative_dir, all_hep_id], 'HEP_all', 'subject_ids');
+            save([derivative_dir, all_ecg_id], 'ECG_all', 'subject_ids');
 
         end
     end
-end
-
-% QA plots for rejected epochs
-if exist('rejected_epochs_info', 'var') && ~isempty(rejected_epochs_info)
-    fig = figure('Visible', 'off');
-    hist([rejected_epochs_info.percent_rejected], 20);
-    title('Distribution of Rejected Epochs Percentage');
-    xlabel('Percentage of Epochs Rejected');
-    ylabel('Number of Subjects');
-    print(fig, [derivative_dir 'QA_rejected_epochs_distribution.png'], '-dpng', '-r150');
-    close(fig);
 end
