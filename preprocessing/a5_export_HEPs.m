@@ -16,6 +16,7 @@ for ic = 1:length(ic_cutoffs)
         
             % Initialize local variables with NaNs for parfor
             avg_HEP_local = nan(length(files), 1);
+            avg_ECG_local = nan(length(files), 1);
             HEP_all_local = cell(length(files), 1);
             ECG_all_local = cell(length(files), 1);
             n_total_local = nan(length(files), 1);     
@@ -104,9 +105,16 @@ for ic = 1:length(ic_cutoffs)
                     roi_HEP = mean(mean(meanHEP(chan_roi, time_roi)));
                     avg_HEP_local(i) = roi_HEP;
 
-                    % subject wise average HEP/ECG for this condition 
+                    % average ECG in the same time window as the HEP ROI
+                    if ~isequal(ECG.times, EEG.times)
+                        error('ECG and EEG epoch time vectors differ');
+                    end
+                    roi_ECG = mean(meanECG(1, time_roi));
+                    avg_ECG_local(i) = roi_ECG;
+
+                    % subject wise average HEP/ECG for this condition
                     subj_HEP = struct('meanHEP', meanHEP, 'meanECG', meanECG, 'times', EEG.times, ...
-                        'chanlabels', {{EEG.chanlocs.labels}}, 'roi_HEP', roi_HEP, ...
+                        'chanlabels', {{EEG.chanlocs.labels}}, 'roi_HEP', roi_HEP, 'roi_ECG', roi_ECG, ...
                         'n_epochs_total', n_epochs_pre, 'n_epochs_rejected', length(bad_epoch_indices), ...
                         'n_epochs_kept', size(EEG.data, 3));
                     parsave([HEP_path, subjid, '_', cond_id, '_avgHEP.mat'], subj_HEP);
@@ -136,6 +144,7 @@ for ic = 1:length(ic_cutoffs)
             print(fig, [qa_dir, 'epoch_rejection/', cond_id, '_QA_rejected_epochs.png'], '-dpng', '-r150');
             close(fig);
             avg_HEP_local = avg_HEP_local(valid_idx);
+            avg_ECG_local = avg_ECG_local(valid_idx);
 
             % Get and save valid subject IDs
             all_subject_ids = {files.name};
@@ -148,9 +157,9 @@ for ic = 1:length(ic_cutoffs)
             system(['sed -i "s/\t/\n/g" "' full_path '"']);
 
             % ROI-average HEP per valid subject (same subject order as HEP_all)
-            roi_table = table(valid_subject_ids', avg_HEP_local, n_total_local(valid_idx), ...
+            roi_table = table(valid_subject_ids', avg_HEP_local, avg_ECG_local, n_total_local(valid_idx), ...
                 n_rejected_local(valid_idx), n_total_local(valid_idx) - n_rejected_local(valid_idx), ...
-                'VariableNames', {'subject_id', 'roi_HEP', 'n_epochs_total', 'n_epochs_rejected', 'n_epochs_kept'});
+                'VariableNames', {'subject_id', 'roi_HEP', 'roi_ECG', 'n_epochs_total', 'n_epochs_rejected', 'n_epochs_kept'});
             writetable(roi_table, [derivative_dir, cond_id, '_roi_HEP.csv']);
 
             % Use same valid indices for HEP and ECG data
