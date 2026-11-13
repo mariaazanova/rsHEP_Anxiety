@@ -4,8 +4,9 @@ for d = 1:length(raw_dirs)
     f = [f; dir(fullfile(raw_dirs{d}, '**', [subjid, '*.vhdr']))];
 end
 
-% prefer the _2 recording if they exist (correspond to restarts of the recording)
-% then <ID>_Ruhe.vhdr, then whatever exists (typos)
+% prefer _2: main-study visit (A1_HAUPT01) for participants first recorded in A1_PILOT
+% (their pilot recording is <ID>_Ruhe), or restart of an ESF recording on the same day;
+% then <ID>_Ruhe.vhdr, then whatever exists (typos). Ties: order of raw_dirs.
 second = ~cellfun(@isempty, regexpi({f.name}, ['^', subjid, '(_Ruhe_2|_2_Ruhe)\.vhdr$'], 'once'));
 regular = strcmpi({f.name}, [subjid, '_Ruhe.vhdr']);
 if any(second)
