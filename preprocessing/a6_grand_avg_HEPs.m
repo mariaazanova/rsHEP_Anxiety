@@ -39,10 +39,11 @@ for i = 1:length(hep_files)
 
         % Add info about which condition this represents
         [~,fname,~] = fileparts(hep_files(i).name);
-        parts = split(fname,'_');
-        hp = str2double(parts{2});
-        bl = strjoin(parts(4:5),'_');
-        ic = str2double(parts(7));
+        tok = regexp(fname, '^hp_([\d.]+)_bl_(.+)_ic_([^_]+)_all_HEP$', 'tokens', 'once');
+        if isempty(tok), error('Unexpected group file name: %s', hep_files(i).name); end
+        hp = str2double(tok{1});
+        bl = tok{2};
+        ic = str2double(tok{3});
         
         conditions(i).hp = hp;
         conditions(i).baseline = bl;
