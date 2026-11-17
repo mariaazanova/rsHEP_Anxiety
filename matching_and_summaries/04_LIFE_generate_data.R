@@ -1,10 +1,10 @@
-# LIFE: prepare analysis data with row reconciliation, HEP/ECG pipelines, HR/HRV, scores.
-# Run after LIFE_matching_main.R
+# Run after LIFE_matching.R:
+#   Rscript LIFE_generate_data.R
 # Requires readODS and readxl:
 #   install.packages(c("readODS", "readxl"))
 
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) > 1L) stop("Usage: Rscript LIFE_generate_data_extended_v3.R [matching_output_dir]")
+if (length(args) > 1L) stop("Usage: Rscript LIFE_generate_data.R [matching_output_dir]")
 life <- "/data/p_02865/data/LIFE"
 out <- if (length(args)) args[[1L]] else file.path(life, "derivatives/matching_and_summaries")
 if (!dir.exists(out)) stop("Missing matching output directory: ", out)
@@ -522,55 +522,57 @@ add_coverage <- function(source, column, matched, nonmissing, duplicates, note =
     note = note, stringsAsFactors = FALSE)
 }
 
-# ---- 6. Group CSVs: HEP required, ECG optional ---------------------------
-# Filenames, rather than total CSV count, distinguish the 16 HEP pipelines
-# from their optional ECG counterparts. Other CSVs in the folder are ignored.
+# ---- 6. Group CSVs: five measures from each of 16 ROI HEP files -----------
+# ECG ROI and epoch counts are stored WITH the HEP data, not separate files.
+# Only *roi_HEP.csv files are opened; unrelated CSV files are ignored.
 group_dir <- file.path(life, "derivatives/group")
 if (!dir.exists(group_dir)) stop("Group directory missing: ", group_dir)
-group_files <- sort(list.files(group_dir, pattern = "[.]csv$", full.names = TRUE,
-                               ignore.case = TRUE, recursive = FALSE))
-hep_files <- group_files[grepl("(?i)roi_HEP[.]csv$", basename(group_files), perl = TRUE)]
-ecg_files <- group_files[grepl("(?i)roi_ECG[.]csv$", basename(group_files), perl = TRUE)]
+hep_files <- sort(list.files(group_dir, pattern = "roi_HEP[.]csv$",
+                             full.names = TRUE, recursive = FALSE, ignore.case = TRUE))
 if (!length(hep_files)) stop("No *roi_HEP.csv files in ", group_dir)
 if (length(hep_files) != 16L)
   warning("Expected 16 roi_HEP.csv files, found ", length(hep_files))
-if (!length(ecg_files))
-  message("No roi_ECG.csv files found; importing HEP only.")
-if (length(ecg_files) && length(ecg_files) != length(hep_files))
-  warning("Found ", length(ecg_files), " ECG files and ", length(hep_files),
-          " HEP files; importing the available files independently.")
 
-hep_names <- sub("(?i)[.]csv$", "", basename(hep_files), perl = TRUE)
-ecg_names <- sub("(?i)[.]csv$", "", basename(ecg_files), perl = TRUE)
-group_names <- c(hep_names, ecg_names)
-if (anyDuplicated(group_names) || any(group_names %in% names(result_data)))
-  stop("Group filename-derived column names collide with existing columns")
+pipeline_stems <- sub("(?i)_roi_HEP[.]csv$", "", basename(hep_files), perl = TRUE)
+hep_names <- paste0(pipeline_stems, "_roi_HEP")
+roi_fields <- c("roi_HEP", "roi_ECG", "n_epochs_total",
+                "n_epochs_rejected", "n_epochs_kept")
+new_group_cols <- unlist(lapply(pipeline_stems, function(stem)
+  paste0(stem, "_", roi_fields)), use.names = FALSE)
+if (anyDuplicated(new_group_cols) || any(new_group_cols %in% names(result_data)))
+  stop("Group filename-derived column names collide with existing data")
 
-read_group_roi <- function(filename, column_name, label) {
+for (i in seq_along(hep_files)) {
+  filename <- hep_files[i]
+  source <- basename(filename)
   tab <- read_csv(filename)
-  if (!all(c("subject_id", column_name) %in% names(tab)))
-    stop("Group CSV ", basename(filename), " needs subject_id and ", column_name)
-  keys <- resolve_ids(tab$subject_id, label)
-  roi <- normalize(tab[[column_name]])
-  vals <- rep(NA_character_, length(main_ids))
+  names(tab) <- trimws(names(tab))
+  if (anyDuplicated(names(tab))) stop("Duplicate headers in ", source)
+  needed <- c("subject_id", roi_fields)
+  if (!all(needed %in% names(tab)))
+    stop("Missing columns in ", source, ": ",
+         paste(setdiff(needed, names(tab)), collapse = ", "))
+
+  keys <- resolve_ids(tab$subject_id, source)
   matched <- unique(keys[!is.na(keys)])
-  repeated <- 0L
-  for (k in matched) {
-    inds <- which(keys == k)
-    if (length(inds) > 1L) repeated <- repeated + 1L
-    nonmissing <- unique(roi[inds][!is.na(roi[inds])])
-    if (length(nonmissing) == 1L) vals[k] <- nonmissing
-    if (length(nonmissing) > 1L)
-      add_issue(label, main_ids[k], paste0("conflicting_", column_name, "_duplicates"),
-                paste(length(inds), "source rows; left missing"))
+  repeated <- sum(table(keys[!is.na(keys)]) > 1L)
+  for (field in roi_fields) {
+    label <- paste0(pipeline_stems[i], "_", field)
+    source_values <- normalize(tab[[field]])
+    vals <- rep(NA_character_, length(main_ids))
+    for (k in matched) {
+      indices <- which(keys == k)
+      nonmissing <- unique(source_values[indices][!is.na(source_values[indices])])
+      if (length(nonmissing) == 1L) vals[k] <- nonmissing
+      if (length(nonmissing) > 1L)
+        add_issue(source, main_ids[k], paste0("conflicting_", field, "_duplicates"),
+                  paste(length(indices), "input rows; value left missing"))
+    }
+    # add_column replicates every matched value to all unresolved LIFE rows.
+    add_column(label, vals)
+    add_coverage(source, label, length(matched), sum(!is.na(vals)), repeated)
   }
-  add_column(label, vals)
-  add_coverage(label, column_name, length(matched), sum(!is.na(vals)), repeated)
 }
-for (i in seq_along(hep_files))
-  read_group_roi(hep_files[i], "roi_HEP", hep_names[i])
-for (i in seq_along(ecg_files))
-  read_group_roi(ecg_files[i], "roi_ECG", ecg_names[i])
 
 # ---- 7. Preprocessing log ODS: later a5 supersedes a1/a2 -------------------
 if (!requireNamespace("readODS", quietly = TRUE))
@@ -710,7 +712,7 @@ gad[] <- lapply(gad, normalize)
 # Some Excel date cells imported as text are actually Excel serial numbers,
 # e.g. 40604.5060416667 (the fractional part is time of day). Export as
 # YYYY-MM-DD using the conventional Excel 1900 date system.
-format_gad_date <- function(x) {
+format_gad_date <- function(x, date_field = "GAD7_DATUM") {
   x <- normalize(x)
   output <- x
   serial <- !is.na(x) & grepl("^[0-9]+(?:\\.[0-9]+)?$", x, perl = TRUE)
@@ -731,12 +733,13 @@ format_gad_date <- function(x) {
     if (length(good)) output[other[good]] <- format(trial[good], "%Y-%m-%d")
     other <- other[-good]
   }
-  if (length(other)) warning("Unrecognized GAD7_DATUM value(s): ",
+  if (length(other)) warning("Unrecognized ", date_field, " value(s): ",
                               paste(unique(x[other]), collapse = " | "))
   output[other] <- NA_character_
   output
 }
 gad$GAD7_DATUM <- format_gad_date(gad$GAD7_DATUM)
+gad$GAD7_DATUM <- as.character(as.Date(gad$GAD7_DATUM) + 1462L)
 gad_key <- normalize_id(gad$GAD7_SIC)
 
 # Include identifiers from ALL ORIGINAL tabular rows, even if they were later
@@ -809,11 +812,12 @@ for (k in seq_along(main_ids)) {
 }
 
 for (col in gad_columns) {
+  output_col <- if (col == "GAD7_DATUM") "date_gad7" else col
   matched_values <- rep(NA_character_, length(main_ids))
   has_match <- which(!is.na(gad_selected))
   if (length(has_match)) matched_values[has_match] <- gad[[col]][gad_selected[has_match]]
-  add_column(col, matched_values)  # Same value on EVERY final row of a LIFE ID.
-  add_coverage("PV0491_T00019_NODUP.xlsx", col, length(has_match),
+  add_column(output_col, matched_values) # Same value on EVERY final row of a LIFE ID.
+  add_coverage("PV0491_T00019_NODUP.xlsx", output_col, length(has_match),
                sum(!is.na(matched_values)), sum(table(gad_key[!is.na(gad_key)]) > 1L),
                "GAD7_SIC via Column2/sic; IDmatch alias only if unmatched")
 }
@@ -821,7 +825,158 @@ gad_direct_n <- sum(!is.na(gad_selected) & gad_method == "direct_Column2_or_sic"
 gad_fallback_n <- sum(!is.na(gad_selected) & gad_method == "IDmatch_sheet_alias")
 gad_ambiguous_n <- sum(lengths(gad_hits) > 0L & is.na(gad_selected))
 
-# ---- 10. HR/HRV: import all measurements by participant ID ---------------
+# ---- 10. MEDANAMEEG: neurological history, keyed by LIFE participant ID ---
+# No fuzzy matching beyond the same exact/unique canonical-ID logic used above.
+med_file <- file.path(life, "tabular/Behavior/data/PV0426_T00399_NODUP.xlsx")
+if (!file.exists(med_file)) stop("Missing MEDANAMEEG workbook: ", med_file)
+med <- as.data.frame(readxl::read_excel(med_file, sheet = 1,
+  col_types = "text", .name_repair = "minimal"),
+  check.names = FALSE, stringsAsFactors = FALSE)
+names(med) <- trimws(names(med))
+if (anyDuplicated(names(med))) stop("Duplicate MEDANAMEEG workbook headers")
+med_sources <- c("MEDANAMEEG_DATUM", "MEDANAMEEG_MAE_IK",
+  "MEDANAMEEG_MAE_SHT", "MEDANAMEEG_MAE_SF", "MEDANAMEEG_MAE_ME",
+  "MEDANAMEEG_MAE_OP")
+med_labels <- c("date_medanameeg", "Intrakranielle_Blutung",
+  "schaedel_hirn_trauma", "schaedelfraktur", "meningitis", "head_brain_op")
+if (!all(c("MEDANAMEEG_SIC", med_sources) %in% names(med)))
+  stop("MEDANAMEEG workbook missing: ",
+       paste(setdiff(c("MEDANAMEEG_SIC", med_sources), names(med)), collapse = ", "))
+med[] <- lapply(med, normalize)
+med$MEDANAMEEG_DATUM <- format_gad_date(med$MEDANAMEEG_DATUM,
+                                         "MEDANAMEEG_DATUM")
+med$MEDANAMEEG_DATUM <- as.character(as.Date(med$MEDANAMEEG_DATUM) + 1462L)
+med_keys <- resolve_ids(med$MEDANAMEEG_SIC, basename(med_file))
+med_matched <- unique(med_keys[!is.na(med_keys)])
+med_repeated <- sum(table(med_keys[!is.na(med_keys)]) > 1L)
+for (j in seq_along(med_sources)) {
+  source_field <- med_sources[j]
+  target_field <- med_labels[j]
+  vals <- rep(NA_character_, length(main_ids))
+  for (k in med_matched) {
+    indices <- which(med_keys == k)
+    nonmissing <- unique(med[[source_field]][indices])
+    nonmissing <- nonmissing[!is.na(nonmissing)]
+    if (length(nonmissing) == 1L) vals[k] <- nonmissing
+    if (length(nonmissing) > 1L)
+      add_issue(basename(med_file), main_ids[k],
+                paste0("conflicting_", source_field, "_duplicates"),
+                paste(length(indices), "input rows; value left missing"))
+  }
+  add_column(target_field, vals)
+  add_coverage(basename(med_file), target_field, length(med_matched),
+               sum(!is.na(vals)), med_repeated)
+}
+
+# ---- 10a. CNS medication exclusion: participant-level LIFE ID -------------
+medications_path <- file.path(life,
+  "derivatives/matching_and_summaries/medications/LIFE_medications_by_ID.csv")
+if (!file.exists(medications_path))
+  stop("Missing medication summary: ", medications_path)
+medications <- read_csv(medications_path)
+names(medications) <- trimws(names(medications))
+if (!ncol(medications) || names(medications)[1L] != "life_id" ||
+    !"cns_exclude_definite" %in% names(medications))
+  stop("Medication table must start with life_id and contain cns_exclude_definite")
+medication_keys <- resolve_ids(medications[[1L]], basename(medications_path))
+medication_matched <- unique(medication_keys[!is.na(medication_keys)])
+medication_repeated <- sum(table(medication_keys[!is.na(medication_keys)]) > 1L)
+medication_values <- rep(NA_character_, length(main_ids))
+medication_source <- normalize(medications$cns_exclude_definite)
+for (k in medication_matched) {
+  matches <- which(medication_keys == k)
+  distinct <- unique(na.omit(medication_source[matches]))
+  if (length(distinct) == 1L) medication_values[k] <- distinct
+  if (length(distinct) > 1L)
+    add_issue(basename(medications_path), main_ids[k],
+      "conflicting_cns_exclude_definite", "Conflicting duplicate rows; left missing")
+}
+add_column("medications_cns_exclude_definite", medication_values)
+add_coverage(basename(medications_path), "medications_cns_exclude_definite",
+  length(medication_matched), sum(!is.na(medication_values)), medication_repeated)
+
+# ---- 10b. Echo LVOT stroke volume: match pseudonym to Column2 or SIC ------
+echo_path <- file.path(life, "tabular/Behavior/data/PV491_T01092_ECHO_LVOT.csv")
+if (!file.exists(echo_path)) stop("Missing ECHO LVOT file: ", echo_path)
+echo_fields <- c("ECHO_READ_STUDYDATETIME", "ECHO_READ_AGE", "ECHO_READ_LVOT_SV")
+# The first column has a damaged header (e.g., '���pseudonym'). Identify it
+# by POSITION, while validating all three named measurement columns. Try
+# common delimiters/encodings rather than silently reading one giant column.
+read_echo <- function(path) {
+  for (enc in c("UTF-8-BOM", "latin1", "UTF-16LE")) {
+    for (sep in c(",", ";", "\t")) {
+      candidate <- suppressWarnings(tryCatch(read.table(path,
+        header = TRUE, sep = sep, quote = '"', comment.char = "",
+        colClasses = "character", check.names = FALSE, stringsAsFactors = FALSE,
+        na.strings = "", fileEncoding = enc), error = function(e) NULL))
+      if (is.null(candidate) || ncol(candidate) < 4L) next
+      # Leave the garbled first header untouched; only named fields matter.
+      names(candidate)[-1L] <- trimws(names(candidate)[-1L])
+      if (all(echo_fields %in% names(candidate))) return(candidate)
+    }
+  }
+  stop("Could not parse ECHO CSV into pseudonym and required columns: ",
+       paste(echo_fields, collapse = ", "))
+}
+echo <- read_echo(echo_path)
+if (anyDuplicated(names(echo)[-1L])) stop("Duplicate ECHO measurement headers")
+echo[] <- lapply(echo, normalize)
+echo_pseudonym <- normalize_id(echo[[1L]])
+echo$ECHO_READ_STUDYDATETIME <- sub(
+  "^([0-9]{4})\\.([0-9]{2})\\.([0-9]{2}) [0-9]{2}:[0-9]{2}:[0-9]{2}$",
+  "\\1-\\2-\\3",
+  echo$ECHO_READ_STUDYDATETIME
+)
+echo$ECHO_READ_STUDYDATETIME <- format_gad_date(
+  echo$ECHO_READ_STUDYDATETIME, "ECHO_READ_STUDYDATETIME")
+
+# Same pseudonym may appear in several original IDmatch rows of one LIFE
+# participant. It must not be shared by DIFFERENT LIFE participants.
+# direct_aliases were built above from all original Column2/SIC values.
+alias_values <- unlist(direct_aliases, use.names = FALSE)
+alias_owners <- rep(seq_along(main_ids), lengths(direct_aliases))
+alias_map <- split(alias_owners, alias_values)
+echo_keys <- rep(NA_integer_, nrow(echo))
+for (i in which(!is.na(echo_pseudonym))) {
+  candidates <- unique(alias_map[[echo_pseudonym[i]]])
+  if (length(candidates) == 1L) echo_keys[i] <- candidates
+  if (length(candidates) > 1L)
+    add_issue(basename(echo_path), echo_pseudonym[i],
+      "shared_echo_pseudonym", paste(main_ids[candidates], collapse = " | "))
+}
+echo_matched <- unique(echo_keys[!is.na(echo_keys)])
+echo_repeated <- sum(table(echo_keys[!is.na(echo_keys)]) > 1L)
+next_echo_name <- function(base, existing) {
+  if (!(base %in% existing)) return(base)
+  n <- 2L
+  while (paste0(base, "_", n) %in% existing) n <- n + 1L
+  paste0(base, "_", n)
+}
+echo_labels <- vapply(
+  c("date_echo", "age_echo", "echo_lvot_sv"),
+  next_echo_name, character(1L),
+  existing = names(result_data)
+)
+for (j in seq_along(echo_fields)) {
+  source_col <- echo_fields[j]
+  output_col <- echo_labels[j]
+  vals <- rep(NA_character_, length(main_ids))
+  for (k in echo_matched) {
+    matches <- which(echo_keys == k)
+    distinct <- unique(na.omit(echo[[source_col]][matches]))
+    if (length(distinct) == 1L) vals[k] <- distinct
+    if (length(distinct) > 1L)
+      add_issue(basename(echo_path), main_ids[k],
+        paste0("conflicting_", source_col, "_duplicates"),
+        paste(length(matches), "ECHO rows; value left missing"))
+  }
+  add_column(output_col, vals)
+  add_coverage(basename(echo_path), output_col, length(echo_matched),
+               sum(!is.na(vals)), echo_repeated,
+               "ECHO pseudonym matched to original Column2/SIC aliases")
+}
+
+# ---- 11. HR/HRV: import all measurements by participant ID ---------------
 # Keep the names from the source file; only prefix when a name already exists.
 hrv_path <- file.path(life, "derivatives/HR_HRV_all_participants.csv")
 if (!file.exists(hrv_path)) stop("Missing HR/HRV file: ", hrv_path)
@@ -865,7 +1020,7 @@ for (src in hrv_fields) {
                sum(!is.na(vals)), hrv_repeated)
 }
 
-# ---- 11. Derived participant-level values ---------------------------------
+# ---- 12. Derived participant-level values ---------------------------------
 # Scores are calculated for each output row; external measurements already
 # repeat identically across unresolved duplicate rows of the same LIFE ID.
 # All questionnaire items must be coded 0,1,2,3. Unexpected values become NA.
@@ -885,6 +1040,15 @@ nonmissing_row_sum <- function(x) {
   out[rowSums(!is.na(x)) == 0L] <- NA_real_
   out
 }
+
+# VIGALL drowsiness: B+C > 900 one-second segments (strictly >15 min).
+# VIGALL comes from the same original row selected for EEG; never backfilled.
+if (!all(c("vigall_b", "vigall_c") %in% names(result_data)))
+  stop("Expected vigall_b and vigall_c in selected IDmatch variables")
+vig_b <- positive_number(result_data$vigall_b)
+vig_c <- positive_number(result_data$vigall_c)
+result_data$drowsy_15min <- ifelse(!is.na(vig_b) & !is.na(vig_c),
+  as.integer(vig_b + vig_c > 900), NA_integer_)
 
 # GAD-7: requested available-item sum, with a separate preregistration validity
 # flag. A partially observed score is NOT valid for the registered models.
@@ -911,7 +1075,11 @@ ids_mat <- matrix(NA_real_, nrow = nrow(result_data), ncol = length(ids_slots),
 for (field in intersect(setdiff(ids_regular, "IDS_I09"), names(result_data)))
   ids_mat[, field] <- item_numeric(result_data[[field]])
 # The input field IDS_I09A represents the standard scored item 9 in LIFE.
-if ("IDS_I09A" %in% names(result_data)) ids_mat[, "IDS_I09"] <- item_numeric(result_data[["IDS_I09A"]]) else warning("IDS_I09A is missing")
+if ("IDS_I09A" %in% names(result_data)) {
+  ids_mat[, "IDS_I09"] <- item_numeric(result_data[["IDS_I09A"]])
+} else {
+  warning("IDS_I09A (LIFE item 9) is missing: IDS scores may be incomplete.")
+}
 ids_pair <- function(a, b) {
   a <- if (a %in% names(result_data)) item_numeric(result_data[[a]]) else
     rep(NA_real_, nrow(result_data))
@@ -927,35 +1095,36 @@ result_data$IDS_n_items <- rowSums(!is.na(ids_mat))
 result_data$all_IDS <- as.integer(result_data$IDS_n_items == 28L)
 result_data$IDS <- nonmissing_row_sum(ids_mat)
 
-# Extrasystoles: exactly (S + V) and (S + V) / N, as requested.
-# Do not treat missing beat counts as zero or divide by zero.
+# Extrasystoles: the CER-S table leaves S/V blank when none were detected.
+# Keep the imported ecg_n_beats/ecg_s_beats/ecg_v_beats unchanged: missing
+# S/V means zero ONLY for deriving the count, not for the source columns.
 required_beats <- c("ecg_s_beats", "ecg_v_beats", "ecg_n_beats")
 if (!all(required_beats %in% names(result_data)))
   stop("Cannot calculate extrasystoles; beat columns are missing")
 s <- positive_number(result_data$ecg_s_beats)
 v <- positive_number(result_data$ecg_v_beats)
 n <- positive_number(result_data$ecg_n_beats)
+# Any recorded numeric N/S/V value establishes a usable CER-S measurement;
+# if all three are absent (e.g., Excluded), do NOT turn absence into zero.
+beat_information <- !is.na(n) | !is.na(s) | !is.na(v)
 result_data$extrasystolic_N <- ifelse(
-  !is.na(s) | !is.na(v),
-  rowSums(cbind(s, v), na.rm = TRUE),
-  NA_real_
-)
-result_data$extrasystolic_proportion <- ifelse(!is.na(result_data$extrasystolic_N) &
-                                               !is.na(n) & n > 0,
-                                               result_data$extrasystolic_N / n, NA_real_)
+  beat_information, rowSums(cbind(s, v), na.rm = TRUE), NA_real_)
+result_data$extrasystolic_proportion <- ifelse(
+  !is.na(n) & n > 0 & !is.na(result_data$extrasystolic_N),
+  result_data$extrasystolic_N / n, NA_real_)
 
-# Extrasystole exclusion: > 4 SD ABOVE the sample mean (one-sided), as preregistered.
-# Count each participant once when estimating the sample mean and SD;
-# assign the same score and exclusion flag to all unresolved rows of that ID.
+# Compute the across-participant reference on unique measured LIFE IDs only.
+# This INCLUDES genuine zero counts when N is available and S/V are blank,
+# and EXCLUDES participants whose entire CER-S record is unmeasured.
 extra_unique <- !duplicated(result_data$life_id)
 extra_reference <- result_data$extrasystolic_N[extra_unique]
-extra_mean <- if (any(!is.na(extra_reference)))
-  mean(extra_reference, na.rm = TRUE) else NA_real_
-extra_sd <- if (sum(!is.na(extra_reference)) >= 2L)
-  sd(extra_reference, na.rm = TRUE) else NA_real_
+extra_reference <- extra_reference[!is.na(extra_reference)]
+extra_mean <- if (length(extra_reference)) mean(extra_reference) else NA_real_
+extra_sd <- if (length(extra_reference) >= 2L) sd(extra_reference) else NA_real_
 result_data$extrasystolic_N_SD <- if (is.finite(extra_sd) && extra_sd > 0)
   (result_data$extrasystolic_N - extra_mean) / extra_sd else
   rep(NA_real_, nrow(result_data))
+# Preregistered one-sided exclusion: only more than 4 SD ABOVE the mean.
 result_data$extrasystolic_exclusion <- ifelse(
   is.na(result_data$extrasystolic_N_SD), NA_integer_,
   as.integer(result_data$extrasystolic_N_SD > 4)
@@ -983,7 +1152,7 @@ for (label in hep_names) {
                                   na.rm = TRUE)
 }
 
-# ---- 12. Save ONLY useful compact outputs ------------------------------
+# ---- 13. Save ONLY useful compact outputs ------------------------------
 if (anyDuplicated(names(result_data))) stop("Duplicate output column names")
 if (nrow(result_data) != length(final)) stop("Internal error: row count changed")
 if (!identical(result_data[["non-unique"]],
@@ -1086,13 +1255,27 @@ report <- capture.output({
   cat("Other session EEG cells NOT used:  ", count_cells("skipped_secondary_eeg_session"), "\n")
   cat("Alternative group/date pairs saved:", count_cells("saved_alternative_group_date"), "\n")
   cat("Fully empty selected columns dropped:", length(all_empty), "\n")
-  cat("MEDANAM EP-EW columns removed:       ", paste(block, collapse = ", "), "\n")
+  cat("EP-EW columns removed:               ", paste(block, collapse = ", "), "\n")
   cat("Final output columns:               ", ncol(result_data), "\n")
   cat("Group HEP CSVs imported:             ", length(hep_files), "\n")
-  cat("Group ECG CSVs imported:             ", length(ecg_files), "\n")
+  cat("Measures per HEP CSV:                ", paste(roi_fields, collapse = ", "), "\n")
+  cat("MEDANAMEEG matched participants:      ", length(med_matched), "\n")
+  cat("MEDANAMEEG source duplicate IDs:     ", med_repeated, "\n")
+  cat("CNS medication matched participants:  ", length(medication_matched), "\n")
+  cat("CNS medication flags with values:     ", sum(!is.na(medication_values)), "\n")
+  cat("ECHO LVOT matched participants:       ", length(echo_matched), "\n")
+  cat("ECHO source duplicate IDs:           ", echo_repeated, "\n")
   cat("HR/HRV columns imported:             ", length(hrv_fields), "\n")
   cat("GAD-7 complete (unique participants):", sum(result_data$all_GAD7[!duplicated(result_data$life_id)] == 1L), "\n")
   cat("IDS complete (unique participants):  ", sum(result_data$all_IDS[!duplicated(result_data$life_id)] == 1L), "\n")
+  cat("VIGALL B+C >900 (unique participants):", sum(result_data$drowsy_15min[extra_unique] == 1L, na.rm = TRUE), "\n")
+  cat("VIGALL B/C missing (unique subjects): ", sum(is.na(result_data$drowsy_15min[extra_unique])), "\n")
+  cat("CER-S without usable beat counts:    ", sum(!beat_information[extra_unique]), "\n")
+  cat("CER-S with N but missing S and V (assumed zero): ",
+      sum(!is.na(n[extra_unique]) & is.na(s[extra_unique]) & is.na(v[extra_unique])), "\n")
+  cat("Extrasystole SD reference participants: ", length(extra_reference), "\n")
+  cat("Observed extrasystolic_N = 0 (unique participants): ",
+      sum(result_data$extrasystolic_N[extra_unique] == 0, na.rm = TRUE), "\n")
   cat("GAD-7 groups high/low (unique participants):\n")
   print(table(result_data$gad7_group[!duplicated(result_data$life_id)], useNA = "ifany"))
   cat("Extrasystole count mean (unique participants):", extra_mean, "\n")
