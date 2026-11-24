@@ -1,0 +1,520 @@
+---
+title: "rsHEP & Anxiety (LIFE): Data Inventory, Matching & Exclusion Summary"
+date: "`r format(Sys.Date(), '%Y-%m-%d')`"
+params:
+  life_dir: "/data/p_02865/data/LIFE"
+knit: (function(input, ...) {
+    out_dir <- "/data/p_02865/data/LIFE/derivatives/matching_and_summaries/summary_sample_and_exclusions";
+    dir.create(out_dir, recursive = TRUE, showWarnings = FALSE);
+    rmarkdown::render(input, output_dir = out_dir, envir = globalenv())
+  })
+output:
+  word_document:
+    toc: true
+    toc_depth: 2
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE, warning = FALSE, message = FALSE,
+  fig.width = 6.5, fig.height = 4.0, dpi = 300
+)
+
+library(ggplot2)
+has_ft <- requireNamespace("flextable", quietly = TRUE)
+if (has_ft) {
+  flextable::set_flextable_defaults(
+    font.family = "Calibri", font.size = 9,
+    padding.top = 3, padding.bottom = 3, padding.left = 4, padding.right = 4
+  )
+}
+
+make_tab <- function(df, caption = NULL) {
+  if (has_ft) {
+    ft <- flextable::flextable(df)
+    ft <- flextable::theme_booktabs(ft)
+    ft <- flextable::autofit(ft)
+    ft <- flextable::set_table_properties(
+      ft, width = 1, layout = "autofit",
+      opts_word = list(split = FALSE, repeat_headers = TRUE)
+    )
+    if (!is.null(caption)) ft <- flextable::set_caption(ft, caption = caption)
+    return(ft)
+  }
+  knitr::kable(df, caption = caption, row.names = FALSE)
+}
+
+life    <- params$life_dir
+deriv   <- file.path(life, "derivatives")
+ms_dir  <- file.path(deriv, "matching_and_summaries")
+out_dir <- file.path(ms_dir, "summary_sample_and_exclusions")
+fig_dir <- file.path(out_dir, "figures")
+dir.create(fig_dir, recursive = TRUE, showWarnings = FALSE)
+
+read_safe <- function(path) {
+  if (!file.exists(path)) return(NULL)
+  read.csv(path, stringsAsFactors = FALSE, check.names = FALSE,
+           na.strings = c("", "NA"), fileEncoding = "UTF-8-BOM")
+}
+
+save_tab <- function(df, name) {
+  write.csv(df, file.path(out_dir, name), row.names = FALSE, na = "")
+}
+
+save_fig <- function(p, name, w = 6.5, h = 4.0) {
+  ggsave(file.path(fig_dir, name), plot = p, width = w, height = h, dpi = 300)
+}
+
+fmt_n_pct <- function(n, denom) {
+  ifelse(is.na(n) | is.na(denom) | denom == 0, "-",
+         sprintf("%d (%.1f%%)", as.integer(n), 100 * n / denom))
+}
+
+# Load upstream outputs & datasets
+rec_inv   <- read_safe(file.path(ms_dir, "EEG_recordings_inventory.csv"))
+part_inv  <- read_safe(file.path(ms_dir, "EEG_participants_inventory.csv"))
+id_rem    <- read_safe(file.path(ms_dir, "IDmatch_row_removals.csv"))
+id_recov  <- read_safe(file.path(ms_dir, "IDmatch_recovery_summary.csv"))
+man_audit <- read_safe(file.path(ms_dir, "data_manual_resolution_audit.csv"))
+
+data_pre  <- read_safe(file.path(deriv, "data.csv"))
+data_post <- read_safe(file.path(deriv, "data_after_exclusion.csv"))
+data_pipe <- read_safe(file.path(deriv, "data_with_pipeline_flags.csv"))
+
+excl_crit  <- read_safe(file.path(ms_dir, "exclusion", "exclusion_criterion_counts.csv"))
+excl_src   <- read_safe(file.path(ms_dir, "exclusion", "exclusion_source_counts.csv"))
+excl_anx   <- read_safe(file.path(ms_dir, "exclusion", "exclusion_anxiety_groups.csv"))
+excl_ovlp  <- read_safe(file.path(ms_dir, "exclusion", "exclusion_common_overlap.csv"))
+excl_ev_id <- read_safe(file.path(ms_dir, "exclusion", "exclusion_evidence_by_ID.csv"))
+med_qc     <- read_safe(file.path(ms_dir, "medications", "medications_cns_yes_qc.csv"))
+med_by_id  <- read_safe(file.path(ms_dir, "medications", "LIFE_medications_by_ID.csv"))
+
+pipe_cnt   <- read_safe(file.path(ms_dir, "pipeline_exclusion", "pipeline_exclusion_counts.csv"))
+pipe_ref   <- read_safe(file.path(ms_dir, "pipeline_exclusion", "pipeline_HEP_reference_stats.csv"))
+pipe_anx   <- read_safe(file.path(ms_dir, "pipeline_exclusion", "pipeline_anxiety_group_counts.csv"))
+
+n_eeg_rec   <- if (!is.null(rec_inv)) nrow(rec_inv) else NA_integer_
+n_eeg_ready <- if (!is.null(rec_inv)) sum(tolower(as.character(rec_inv$ready)) %in% c("true", "1")) else NA_integer_
+n_eeg_uid   <- if (!is.null(part_inv)) nrow(part_inv) else NA_integer_
+n_matched   <- if (!is.null(part_inv)) sum(tolower(as.character(part_inv$matched)) %in% c("true", "1")) else NA_integer_
+
+n_pre_rows  <- if (!is.null(data_pre)) nrow(data_pre) else NA_integer_
+n_pre_uid   <- if (!is.null(data_pre)) length(unique(data_pre$life_id)) else NA_integer_
+n_post_rows <- if (!is.null(data_post)) nrow(data_post) else NA_integer_
+n_post_uid  <- if (!is.null(data_post)) length(unique(data_post$life_id)) else NA_integer_
+n_excl_uid  <- if (!is.na(n_pre_uid) && !is.na(n_post_uid)) n_pre_uid - n_post_uid else NA_integer_
+```
+
+## 1. Executive Overview & Sample Attrition Flow
+
+This report summarizes the participant sample assembly, tabular data matching, preregistered participant-level clinical/quality exclusions (Section 2.2.4 of the Registered Report), and final sample sizes across the 16 EEG preprocessing multiverse pipelines. Detailed EEG signal metrics (e.g., removed channels, ICA correlation cutoffs) are reported separately.
+
+```{r flow-table}
+min_pipe_avail <- if (!is.null(pipe_cnt)) min(pipe_cnt$n_available_for_analysis, na.rm = TRUE) else NA
+max_pipe_avail <- if (!is.null(pipe_cnt)) max(pipe_cnt$n_available_for_analysis, na.rm = TRUE) else NA
+med_pipe_avail <- if (!is.null(pipe_cnt)) round(median(pipe_cnt$n_available_for_analysis, na.rm = TRUE)) else NA
+
+flow_df <- data.frame(
+  Stage = c(
+    "1. Recognized raw resting-state EEG recordings (.vhdr)",
+    "2. Complete & valid EEG file triplets (.vhdr/.eeg/.vmrk)",
+    "3. Unique EEG participants in raw inventory",
+    "4. EEG participants matched to tabular IDmatch data",
+    "5. Assembled pre-exclusion dataset (data.csv)",
+    "6. Excluded by common preregistered criteria",
+    "7. Retained post-exclusion sample (data_after_exclusion.csv)",
+    "8. Available for statistical analysis across 16 HEP pipelines"
+  ),
+  Count = c(
+    as.character(n_eeg_rec),
+    fmt_n_pct(n_eeg_ready, n_eeg_rec),
+    as.character(n_eeg_uid),
+    fmt_n_pct(n_matched, n_eeg_uid),
+    sprintf("%d unique IDs (%d rows)", n_pre_uid, n_pre_rows),
+    fmt_n_pct(n_excl_uid, n_pre_uid),
+    sprintf("%d unique IDs (%d rows; %.1f%% of matched)", n_post_uid, n_post_rows, 100 * n_post_uid / n_pre_uid),
+    if (!is.na(min_pipe_avail)) sprintf("Median = %d (Range: %d - %d)", med_pipe_avail, min_pipe_avail, max_pipe_avail) else "-"
+  ),
+  Notes = c(
+    "Across ruhe, esf_data, and fehlende_Daten folders",
+    "Non-empty files with intact header pointers",
+    "Preferring complete recordings and _Ruhe_2 when repeated",
+    "Exact or unambiguous canonical ID match + IDmatch recovery",
+    "After row reconciliation, external joins & manual review",
+    "Invalid GAD-7, CNS meds, neuro/cardiac history, alcohol, >4SD extrasystoles, >15m drowsy",
+    "Common sample prior to pipeline-specific preprocessing/epoch/outlier drops",
+    "Requires preproc != excluded, >= 300 epochs kept, and |ROI HEP z| <= 3"
+  ),
+  stringsAsFactors = FALSE
+)
+
+save_tab(flow_df, "01_sample_flow_summary.csv")
+make_tab(flow_df, caption = "Table 1. End-to-end participant tracking from raw EEG files to multiverse pipelines.")
+```
+
+---
+
+## 2. Raw EEG Inventory, Tabular Matching & External Data Joins
+
+```{r matching-details}
+if (!is.null(rec_inv) && !is.null(part_inv)) {
+  n_multi_rec <- sum(as.integer(part_inv$n_recordings) > 1, na.rm = TRUE)
+  n_ruhe2     <- sum(tolower(as.character(part_inv$has_ruhe_2)) %in% c("true", "1"), na.rm = TRUE)
+  n_recov     <- if (!is.null(id_recov)) sum(id_recov$status == "recovered", na.rm = TRUE) else 0L
+  n_man       <- if (!is.null(man_audit)) nrow(man_audit) else 0L
+
+  match_df <- data.frame(
+    Metric = c(
+      "Participants with > 1 raw EEG recording",
+      "Participants with a second session (_Ruhe_2)",
+      "Participants with Table3 data recovered from Behavior files",
+      "Empty / exact-duplicate IDmatch rows cleaned",
+      "Manual review decisions applied (primary row & external source ties)",
+      "Duplicate participant rows remaining in data.csv"
+    ),
+    Value = c(
+      fmt_n_pct(n_multi_rec, n_eeg_uid),
+      fmt_n_pct(n_ruhe2, n_eeg_uid),
+      as.character(n_recov),
+      if (!is.null(id_rem)) as.character(nrow(id_rem)) else "-",
+      as.character(n_man),
+      if (!is.na(n_pre_rows)) as.character(n_pre_rows - n_pre_uid) else "-"
+    ),
+    stringsAsFactors = FALSE
+  )
+  save_tab(match_df, "02_matching_and_reconciliation_stats.csv")
+  make_tab(match_df, caption = "Table 2. EEG recording selection, IDmatch cleaning, and manual reconciliation.")
+}
+```
+
+External sources linked into `data.csv` prior to exclusions (`N =` `r n_pre_uid` unique participants):
+
+```{r external-coverage}
+if (!is.null(data_pre)) {
+  u_pre <- data_pre[!duplicated(data_pre$life_id), ]
+  ext_df <- data.frame(
+    External_Source = c(
+      "GAD-7 Questionnaire (PV0491_T00019_NODUP)",
+      "IDS-SR30 Depression (IDmatch Table3)",
+      "VIGALL Vigilance B/C segments (IDmatch Table3)",
+      "CER-S Beat & Extrasystole Analysis (ECGAna_allSubj)",
+      "Simultaneous 20-min ECG HR & RMSSD (MATLAB R-peaks)",
+      "Neurological Anamnesis (MEDANAMEEG PV0426_T00399)",
+      "ATC Medication Screening (LIFE_medications_by_ID)",
+      "Earlier Echo LVOT measurement (not the new biplane SV)"
+    ),
+    Key_Variable = c(
+      "all_GAD7 == 1 (all 7 items)",
+      "all_IDS == 1 (all 28 scored items)",
+      "drowsy_15min non-missing",
+      "extrasystolic_N non-missing",
+      "HR_bpm & RMSSD_ms non-missing",
+      "Intrakranielle_Blutung non-missing",
+      "medications_cns_exclude_definite non-missing",
+      "echo_lvot_sv non-missing (legacy field)"
+    ),
+    Available_Pre_Exclusion = c(
+      fmt_n_pct(sum(u_pre$all_GAD7 == 1, na.rm = TRUE), nrow(u_pre)),
+      fmt_n_pct(sum(u_pre$all_IDS == 1, na.rm = TRUE), nrow(u_pre)),
+      fmt_n_pct(sum(!is.na(u_pre$drowsy_15min)), nrow(u_pre)),
+      fmt_n_pct(sum(!is.na(u_pre$extrasystolic_N)), nrow(u_pre)),
+      fmt_n_pct(sum(!is.na(u_pre$HR_bpm) & !is.na(u_pre$RMSSD_ms)), nrow(u_pre)),
+      fmt_n_pct(sum(!is.na(u_pre$Intrakranielle_Blutung)), nrow(u_pre)),
+      fmt_n_pct(sum(!is.na(u_pre$medications_cns_exclude_definite)), nrow(u_pre)),
+      fmt_n_pct(sum(!is.na(u_pre$echo_lvot_sv)), nrow(u_pre))
+    ),
+    stringsAsFactors = FALSE
+  )
+  save_tab(ext_df, "03_external_source_coverage_pre_exclusion.csv")
+  make_tab(ext_df, caption = "Table 3. Data completeness of linked external sources before participant exclusions (including the original LVOT measure, which is not the biplane SV chosen for the control analyses below).")
+}
+```
+
+### Confirmed Datajoin Matching & Newly Added Controls (after Common Exclusions)
+
+Script **06b** runs *after* the common exclusions and conservatively matches the retained sample to the LIFE source workbooks. The table below distinguishes availability in the **entire source workbook** from the number of distinct post-exclusion participants with an accepted match and a valid measurement. The new stroke-volume control is `lvedv_lvesv` (biplane modified Simpson LVEDV - LVESV), **not** the pre-existing `echo_lvot_sv`. Source-wide counts are not denominated by the EEG cohort size.
+
+```{r post-exclusion-control-join}
+ctrl_cov <- read_safe(file.path(ms_dir, "datajoin_after_exclusion", "datajoin_controls_coverage.csv"))
+ctrl_cols <- c("echo_lvedv_mod_bp", "echo_lvesv_mod_bp", "lvedv_lvesv", "height", "diabetes_final")
+if (!is.null(data_post) && all(ctrl_cols %in% names(data_post)) && !is.null(ctrl_cov)) {
+  u_post <- data_post[!duplicated(data_post$life_id), , drop = FALSE]
+  pos <- match(ctrl_cols, ctrl_cov$output_column)
+  if (all(!is.na(pos))) {
+    q <- ctrl_cov[pos, , drop = FALSE]
+    valid_N <- vapply(ctrl_cols, function(c) {
+      v <- trimws(as.character(u_post[[c]]))
+      sum(!is.na(v) & nzchar(v) & !(toupper(v) %in% c("NA", "NULL")))
+    }, integer(1))
+    join_df <- data.frame(
+      New_Variable = ctrl_cols,
+      LIFE_Source_Column = q$source_column,
+      Source_Initially_Nonempty = q$source_raw_nonempty,
+      Source_Valid_N = q$source_valid_nonmissing,
+      Confirmed_Matches_N = q$postexclusion_confirmed_participants,
+      PostExclusion_Valid_N = valid_N,
+      PostExclusion_Valid_Pct = sprintf("%.1f%%", 100 * valid_N / nrow(u_post)),
+      stringsAsFactors = FALSE
+    )
+    save_tab(join_df, "03b_post_exclusion_control_join_coverage.csv")
+    make_tab(join_df, caption = "Table 3b. Source-wide versus post-exclusion coverage of the five new 06b columns; denominator for final percentages is the unique retained EEG sample.")
+  }
+} else {
+  cat("Post-exclusion control-join coverage is unavailable; run 06b and retain its diagnostic CSV before knitting this section.")
+}
+```
+
+---
+
+## 3. Pipeline-Independent (Common) Exclusions
+
+Participants were screened on seven preregistered participant-level criteria (Section 2.2.4). Because a single participant can meet multiple exclusion criteria simultaneously, Table 4 reports both **total flagged** per criterion and **sequential (newly excluded)** counts.
+
+```{r common-exclusions-table}
+if (!is.null(excl_crit)) {
+  crit_labels <- c(
+    invalid_GAD7 = "Invalid / incomplete GAD-7 (< 7 items)",
+    alcohol_on_EEG_day = "Alcohol consumed on EEG day",
+    neurological_history = "Neurological history (stroke, hemorrhage, neuro-op, epilepsy, MS, Parkinson)",
+    cardiac_history = "Cardiac history (infarct, bypass, CHD/angina, echo arrhythmia, pacemaker)",
+    CNS_medications = "Definite CNS-active medication (ATC liberal rule)",
+    extrasystoles_above_4SD = "Extrasystolic beats > 4 SD above sample mean",
+    drowsy_over_15min = "Drowsy > 15 of 20 min (VIGALL B+C > 900 s)"
+  )
+
+  c_df <- data.frame(
+    Criterion = ifelse(excl_crit$criterion %in% names(crit_labels),
+                       crit_labels[excl_crit$criterion], excl_crit$criterion),
+    Total_Flagged = fmt_n_pct(excl_crit$participants_flagged, n_pre_uid),
+    Sequential_New = fmt_n_pct(excl_crit$newly_excluded_participants, n_pre_uid),
+    Flagged_Low_GAD7 = as.character(excl_crit$low_anxiety_participants),
+    Flagged_High_GAD7 = as.character(excl_crit$high_anxiety_participants),
+    stringsAsFactors = FALSE
+  )
+  names(c_df) <- c("Preregistered Criterion", "Total Flagged (% N)", "Newly Excluded (% N)", "In Low GAD-7", "In High GAD-7")
+  save_tab(c_df, "04_common_exclusion_criteria.csv")
+  make_tab(c_df, caption = "Table 4. Participant-level exclusions by preregistered criterion.")
+}
+```
+
+```{r common-exclusions-plot, fig.height=3.6}
+if (!is.null(excl_crit)) {
+  plot_crit <- excl_crit
+  short_names <- c(
+    invalid_GAD7 = "Invalid GAD-7",
+    alcohol_on_EEG_day = "Alcohol on EEG day",
+    neurological_history = "Neurological history",
+    cardiac_history = "Cardiac history",
+    CNS_medications = "CNS medications",
+    extrasystoles_above_4SD = "Extrasystoles (>4 SD)",
+    drowsy_over_15min = "Drowsy (>15 min)"
+  )
+  plot_crit$label <- ifelse(plot_crit$criterion %in% names(short_names),
+                            short_names[plot_crit$criterion], plot_crit$criterion)
+  plot_crit$label <- reorder(plot_crit$label, plot_crit$participants_flagged)
+
+  p1 <- ggplot(plot_crit, aes(x = label, y = participants_flagged)) +
+    geom_col(fill = "#3B6998", width = 0.68) +
+    geom_text(aes(label = sprintf("%d (%.1f%%)", participants_flagged, 100 * participants_flagged / n_pre_uid)),
+              hjust = -0.1, size = 3.1) +
+    coord_flip(ylim = c(0, max(plot_crit$participants_flagged) * 1.22)) +
+    labs(
+      title = "Participants Flagged per Common Exclusion Criterion",
+      subtitle = sprintf("Pre-exclusion matched sample: N = %d (categories can overlap)", n_pre_uid),
+      x = NULL, y = "Number of Participants Flagged"
+    ) +
+    theme_minimal(base_size = 10) +
+    theme(panel.grid.minor = element_blank(), panel.grid.major.y = element_blank())
+
+  save_fig(p1, "fig01_common_exclusion_counts.png", w = 6.5, h = 3.6)
+  print(p1)
+}
+```
+
+### Breakdown of Medical, Medication & Overlap Sub-Criteria
+
+```{r subsource-and-overlap}
+if (!is.null(excl_src)) {
+  sub_src <- excl_src[excl_src$criterion %in% c("neurological_history", "cardiac_history"), ]
+  if (nrow(sub_src) > 0) {
+    sub_src <- sub_src[order(sub_src$criterion, -sub_src$participants_flagged), ]
+    sub_df <- data.frame(
+      Domain = sub_src$criterion,
+      Source_Variable = sub_src$source_column,
+      Participants_Flagged = fmt_n_pct(sub_src$participants_flagged, n_pre_uid),
+      stringsAsFactors = FALSE
+    )
+    save_tab(sub_df, "05a_medical_subcriteria_counts.csv")
+    make_tab(sub_df, caption = "Table 5a. Specific neurological and cardiac exclusion triggers.")
+  }
+}
+```
+
+```{r cns-med-breakdown}
+if (!is.null(med_qc) && !is.null(med_by_id) && !is.null(data_pre)) {
+  med_in_sample <- med_by_id[med_by_id$life_id %in% data_pre$life_id & med_by_id$cns_exclude_definite == 1, ]
+  if (nrow(med_in_sample) > 0) {
+    pairs <- do.call(rbind, lapply(seq_len(nrow(med_in_sample)), function(i) {
+      codes <- trimws(unlist(strsplit(as.character(med_in_sample$cns_yes_atc_codes[i]), "[|;[:space:]]+")))
+      codes <- codes[nzchar(codes) & !is.na(codes)]
+      if (!length(codes)) return(NULL)
+      data.frame(life_id = med_in_sample$life_id[i], atc_code = codes, stringsAsFactors = FALSE)
+    }))
+    if (!is.null(pairs) && nrow(pairs) > 0) {
+      pairs <- unique(pairs)
+      pairs$category <- med_qc$cns_category[match(pairs$atc_code, med_qc$atc_code)]
+      pairs$category[is.na(pairs$category)] <- "Other / Manual Override"
+      cat_counts <- aggregate(life_id ~ category, data = unique(pairs[, c("life_id", "category")]), FUN = length)
+      cat_counts <- cat_counts[order(-cat_counts$life_id), ]
+      names(cat_counts) <- c("CNS Medication Class (ATC)", "Unique Matched Participants Flagged")
+      save_tab(cat_counts, "05b_cns_medication_classes.csv")
+      make_tab(cat_counts, caption = "Table 5b. CNS medication exclusions by therapeutic class (participants may take >1 class).")
+    }
+  }
+}
+```
+
+```{r overlap-table}
+if (!is.null(excl_ovlp)) {
+  ov_df <- data.frame(
+    Criteria_Triggered = as.character(excl_ovlp$n_common_criteria),
+    Participants = fmt_n_pct(excl_ovlp$n_participants, n_pre_uid),
+    stringsAsFactors = FALSE
+  )
+  names(ov_df) <- c("Number of Exclusion Criteria Met", "Participants (% of Pre-Exclusion N)")
+  save_tab(ov_df, "06_exclusion_overlap.csv")
+  make_tab(ov_df, caption = "Table 6. Overlap of common exclusion criteria per participant.")
+}
+```
+
+```{r anxiety-retention-table}
+if (!is.null(excl_anx)) {
+  anx_map <- c(
+    low = "Low Anxiety (GAD-7: 0-4)",
+    middle_5_9 = "Mild / Middle Anxiety (GAD-7: 5-9; continuous models only)",
+    high = "High Anxiety (GAD-7: 10-21)",
+    invalid_or_unknown = "Invalid / Incomplete GAD-7"
+  )
+  a_df <- data.frame(
+    Anxiety_Stratum = ifelse(excl_anx$group %in% names(anx_map), anx_map[excl_anx$group], excl_anx$group),
+    Before_Exclusion = as.character(excl_anx$participants_before),
+    Excluded = fmt_n_pct(excl_anx$participants_excluded, excl_anx$participants_before),
+    Retained = fmt_n_pct(excl_anx$participants_retained, excl_anx$participants_before),
+    stringsAsFactors = FALSE
+  )
+  save_tab(a_df, "07_anxiety_group_retention.csv")
+  make_tab(a_df, caption = "Table 7. Retention across GAD-7 strata after common exclusions.")
+}
+```
+
+```{r evidence-completeness}
+if (!is.null(excl_ev_id)) {
+  ev_tab <- as.data.frame(table(Status = excl_ev_id$evidence_status), stringsAsFactors = FALSE)
+  ev_map <- c(
+    assessed_no_exclusion = "Retained: 100% of exclusion source items definitively negative (0)",
+    retained_incomplete_assessment = "Retained: No positive triggers, >=1 source item missing or coded '98' (unknown)",
+    confirmed_excluded = "Excluded: >=1 definitive positive exclusion trigger"
+  )
+  ev_tab$Description <- ifelse(ev_tab$Status %in% names(ev_map), ev_map[ev_tab$Status], ev_tab$Status)
+  ev_tab$Count <- fmt_n_pct(ev_tab$Freq, nrow(excl_ev_id))
+  ev_out <- ev_tab[, c("Description", "Count")]
+  save_tab(ev_out, "08_exclusion_evidence_audit.csv")
+  make_tab(ev_out, caption = "Table 8. Diagnostic completeness of exclusion source variables (missing/98 never auto-excludes).")
+}
+```
+
+---
+
+## 4. Per-Pipeline Exclusions Across the 16 Multiverse Branches
+
+Following common exclusions (`N =` `r n_post_uid`), each of the 16 preprocessing pipelines (2 High-Pass Filters x 4 ICA Artifact Strategies x 2 Baseline Options) applies three preregistered pipeline-specific criteria:
+
+1. **Preprocessing failure** (`preprocessing_logs.ods` status = `excluded`, e.g., >30% bad channels).
+2. **Insufficient trials** (`n_epochs_kept < 300` clean heartbeats).
+3. **Amplitude outlier** (`|roi_HEP_SD| > 3` SD from the pipeline mean).
+
+```{r pipeline-table}
+if (!is.null(pipe_cnt)) {
+  p_df <- pipe_cnt[, c(
+    "pipeline", "high_pass", "n_preproc_excluded", "n_below_300_epochs",
+    "n_roi_HEP_outliers", "n_any_pipeline_exclusion", "n_HEP_missing", "n_available_for_analysis"
+  )]
+
+  if (!is.null(pipe_anx)) {
+    hi_avail <- pipe_anx[pipe_anx$gad7_group == "high", c("pipeline", "n_analysis_available")]
+    lo_avail <- pipe_anx[pipe_anx$gad7_group == "low", c("pipeline", "n_analysis_available")]
+    p_df$Low_GAD7_Avail  <- lo_avail$n_analysis_available[match(p_df$pipeline, lo_avail$pipeline)]
+    p_df$High_GAD7_Avail <- hi_avail$n_analysis_available[match(p_df$pipeline, hi_avail$pipeline)]
+  }
+
+  if (!is.null(pipe_ref)) {
+    p_df$ROI_Mean_SD <- sprintf("%.3f (%.3f)",
+                                pipe_ref$mean_roi_HEP[match(p_df$pipeline, pipe_ref$pipeline)],
+                                pipe_ref$sd_roi_HEP[match(p_df$pipeline, pipe_ref$pipeline)])
+  }
+
+  names(p_df) <- c(
+    "Pipeline", "HP", "Preproc Excl", "<300 Epochs", ">3SD Outlier",
+    "Total Pipe Excl", "HEP Missing", "Final Ready N", "Low GAD N", "High GAD N", "ROI HEP M (SD)"
+  )
+  save_tab(p_df, "09_per_pipeline_exclusions_and_ready_N.csv")
+  make_tab(p_df, caption = "Table 9. Per-pipeline exclusions, ROI reference amplitudes (uV), and final analysis-ready sample sizes.")
+}
+```
+
+*Note on preregistered power minimum:* Check `High GAD N` against the preregistered threshold of $N \ge 25$ required to run Hypothesis 1b/1d group comparisons.
+
+```{r pipeline-figure, fig.height=4.6}
+if (!is.null(pipe_cnt)) {
+  p_plot <- pipe_cnt
+  p_plot$pipeline <- factor(p_plot$pipeline, levels = rev(p_plot$pipeline))
+
+  long_pipe <- rbind(
+    data.frame(pipeline = p_plot$pipeline, Reason = "1. Preproc Excluded", Count = p_plot$n_preproc_excluded),
+    data.frame(pipeline = p_plot$pipeline, Reason = "2. <300 Kept Epochs", Count = p_plot$n_below_300_epochs),
+    data.frame(pipeline = p_plot$pipeline, Reason = "3. ROI HEP >3 SD Outlier", Count = p_plot$n_roi_HEP_outliers)
+  )
+
+  p2 <- ggplot(long_pipe, aes(x = pipeline, y = Count, fill = Reason)) +
+    geom_col(position = "dodge", width = 0.72) +
+    coord_flip() +
+    scale_fill_manual(values = c("#D95F02", "#7570B3", "#1B9E77")) +
+    labs(
+      title = "Pipeline-Specific Exclusions by Reason Across 16 Multiverse Branches",
+      subtitle = sprintf("Evaluated on post-common-exclusion sample (N = %d)", n_post_uid),
+      x = NULL, y = "Number of Participants Flagged", fill = NULL
+    ) +
+    theme_minimal(base_size = 9.5) +
+    theme(legend.position = "top", panel.grid.minor = element_blank())
+
+  save_fig(p2, "fig02_pipeline_exclusions_by_branch.png", w = 6.5, h = 4.6)
+  print(p2)
+}
+```
+
+```{r epoch-retention-summary}
+if (!is.null(data_pipe) && !is.null(pipe_cnt)) {
+  u_pipe <- data_pipe[!duplicated(data_pipe$life_id), ]
+  ep_rows <- lapply(pipe_cnt$pipeline, function(st) {
+    tot <- as.numeric(u_pipe[[paste0(st, "_n_epochs_total")]])
+    rej <- as.numeric(u_pipe[[paste0(st, "_n_epochs_rejected")]])
+    kpt <- as.numeric(u_pipe[[paste0(st, "_n_epochs_kept")]])
+    ex  <- as.numeric(u_pipe[[paste0(st, "_exclude")]])
+    ok  <- which(ex == 0 & !is.na(kpt))
+    if (!length(ok)) return(NULL)
+    data.frame(
+      Pipeline = st,
+      Total_Epochs_M_SD = sprintf("%.0f (%.0f)", mean(tot[ok], na.rm = TRUE), sd(tot[ok], na.rm = TRUE)),
+      Rejected_Epochs_M_SD = sprintf("%.1f (%.1f)", mean(rej[ok], na.rm = TRUE), sd(rej[ok], na.rm = TRUE)),
+      Kept_Epochs_M_SD = sprintf("%.0f (%.0f)", mean(kpt[ok], na.rm = TRUE), sd(kpt[ok], na.rm = TRUE)),
+      Kept_Min_Max = sprintf("%.0f - %.0f", min(kpt[ok], na.rm = TRUE), max(kpt[ok], na.rm = TRUE)),
+      stringsAsFactors = FALSE
+    )
+  })
+  ep_df <- do.call(rbind, ep_rows)
+  if (!is.null(ep_df) && nrow(ep_df) > 0) {
+    save_tab(ep_df, "10_pipeline_epoch_counts_summary.csv")
+    make_tab(ep_df, caption = "Table 10. Heartbeat epoch counts among analysis-ready participants per pipeline.")
+  }
+}
+```

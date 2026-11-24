@@ -1,10 +1,14 @@
-# Run after LIFE_matching.R:
-#   Rscript LIFE_generate_data.R
-# Requires readODS and readxl:
-#   install.packages(c("readODS", "readxl"))
+# Run after LIFE_matching.R to prepare manual review:
+#   Rscript LIFE_generate_data_manual_review.R
+# After marking the generated files in matching_and_summaries/manual/, run:
+#   Rscript LIFE_resolve_matching.R
+# General participant-level data ONLY; pipeline HEP/ECG and preprocessing
+# statuses are joined AFTER the common exclusions by LIFE_pipeline_matching.R.
+# Requires readxl:
+#   install.packages("readxl")
 
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) > 1L) stop("Usage: Rscript LIFE_generate_data.R [matching_output_dir]")
+if (length(args) > 1L) stop("Usage: Rscript 04_LIFE_generate_data_manual_review.R [matching_output_dir]")
 life <- "/data/p_02865/data/LIFE"
 out <- if (length(args)) args[[1L]] else file.path(life, "derivatives/matching_and_summaries")
 if (!dir.exists(out)) stop("Missing matching output directory: ", out)
@@ -12,6 +16,18 @@ if (!dir.exists(out)) stop("Missing matching output directory: ", out)
 read_csv <- function(path) read.csv(path, colClasses = "character",
   check.names = FALSE, stringsAsFactors = FALSE, fileEncoding = "UTF-8-BOM",
   na.strings = "")
+# Spreadsheet UTF-7 exports may encode underscores as +AF8-.
+# Decode only review CSVs; leave all other source-data readers unchanged.
+read_review_csv <- function(path) {
+  x <- read_csv(path)
+  decode_review <- function(v) gsub("+AF8-", "_", v, fixed = TRUE)
+  names(x) <- decode_review(names(x))
+  if (anyDuplicated(names(x)))
+    stop("Duplicate column names after decoding review CSV: ", path)
+  x[] <- lapply(x, decode_review)
+  x
+}
+
 optional_csv <- function(name) {
   path <- file.path(out, name)
   if (file.exists(path)) read_csv(path) else NULL
@@ -55,6 +71,40 @@ changes <- function(a, b, cols) {
 contains <- function(x, pattern) grepl(pattern, x, perl = TRUE, ignore.case = TRUE)
 yes <- function(x) !is.na(x) & toupper(trimws(as.character(x))) %in%
   c("TRUE", "T", "YES", "Y", "1")
+
+# ---- Manual review: preparation pass versus validated resolution pass --------
+resolution_mode <- identical(Sys.getenv("LIFE_MATCHING_RESOLVE", ""), "1")
+manual_dir <- file.path(out, "manual")
+manual_primary_path <- file.path(manual_dir, "data_unresolved_rows_manual.csv")
+manual_issues_path <- file.path(manual_dir, "data_match_issues_manual.csv")
+primary_review <- issue_review <- NULL
+consumed_decisions <- character()
+if (resolution_mode) {
+  if (!file.exists(manual_primary_path) || !file.exists(manual_issues_path))
+    stop("Missing manual decisions in ", manual_dir)
+  primary_review <- read_review_csv(manual_primary_path)
+  issue_review <- read_review_csv(manual_issues_path)
+}
+review_choice <- function(source, id, issue, field = "") {
+  if (!resolution_mode || !nrow(issue_review)) return(NULL)
+  blank <- function(x) ifelse(is.na(x), "", x)
+  ii <- which(blank(issue_review$source) == source &
+    blank(issue_review$life_id) == id &
+    blank(issue_review$issue) == issue &
+    blank(issue_review$field) == field & yes(issue_review$select))
+  if (!length(ii)) return(NULL)
+  if (length(ii) != 1L) stop("Multiple manual choices for ", source, "/", id, "/", issue)
+  consumed_decisions <<- unique(c(consumed_decisions,
+    paste(source, id, issue, field, sep = "\035")))
+  issue_review[ii, , drop = FALSE]
+}
+review_source_row <- function(source, id, issue, field = "") {
+  choice <- review_choice(source, id, issue, field)
+  if (is.null(choice)) return(NA_integer_)
+  row <- suppressWarnings(as.integer(choice$source_row))
+  if (is.na(row) || row < 2L) stop("Invalid reviewed source row for ", id)
+  row - 1L  # source row numbers include the header, just like input_csv_row
+}
 
 # ---- 1. Mapping: keep only requested variables, plus required core fields --
 raw <- optional_csv("IDmatch_EEG.csv")
@@ -189,8 +239,10 @@ recordings <- rbind(inventory[, names(extra_files), drop = FALSE], extra_files)
 # filename alone; the user can explicitly specify that row here.
 # Older date-derived overrides are deliberately ignored to preserve unresolved rows.
 # Set TRUE only when data_primary_row_overrides.csv has been MANUALLY checked.
-use_manual_overrides <- FALSE
-overrides <- if (use_manual_overrides) optional_csv("data_primary_row_overrides.csv") else NULL
+use_manual_overrides <- resolution_mode
+overrides <- if (use_manual_overrides)
+  primary_review[yes(primary_review$select_primary), c("life_id", "input_csv_row"),
+                 drop = FALSE] else NULL
 if (!is.null(overrides)) {
   needed <- c("life_id", "input_csv_row")
   if (!all(needed %in% names(overrides)))
@@ -231,7 +283,8 @@ choose_best <- function(rows, id) {
   if (!is.na(ov)) {
     w <- which(vapply(rows, function(r) ov %in% r$sources, logical(1)))
     if (length(w) == 1L) return(w)
-    stop("Reviewed override not found in candidate records for ", id)
+    if (length(w) > 1L) stop("Reviewed override appears in several records for ", id)
+    # Another incompatible identifier partition is handled separately below.
   }
   # Only used when every row is already mutually compatible outside
   # group/date; tie-breaking here cannot discard a conflicting EEG/VIGALL value.
@@ -260,8 +313,9 @@ choose_best <- function(rows, id) {
 # No _2 filename or recording metadata is used to select a tabular row.
 select_primary <- function(rows, id) {
   ov <- override_row(id)
-  if (!is.na(ov)) return(list(index = choose_best(rows, id),
-                              reason = "reviewed_primary_override"))
+  if (!is.na(ov) && any(vapply(rows, function(r) ov %in% r$sources, logical(1L))))
+    return(list(index = choose_best(rows, id),
+                reason = "reviewed_primary_override"))
   has_eeg <- vapply(rows, has_core, logical(1L))
   if (sum(has_eeg) == 1L)
     return(list(index = which(has_eeg), reason = "only_row_with_core_eeg_information"))
@@ -397,7 +451,8 @@ for (id in ids) {
     if (can_merge_group_date(part)) {
       best <- choose_best(part, id)
       main <- part[[best]]
-      main$reason <- if (is.na(override_row(id)))
+      main$reason <- if (is.na(override_row(id)) ||
+        !any(vapply(part, function(r) override_row(id) %in% r$sources, logical(1L))))
         "only_group_date_disagreement_or_complementary" else "reviewed_primary_override"
       for (j in setdiff(seq_along(part), best)) {
         other <- part[[j]]
@@ -433,6 +488,29 @@ final <- final[order(vapply(final, function(r) min(r$sources), integer(1)))]
 coverage <- unlist(lapply(final, `[[`, "sources"), use.names = FALSE)
 if (!identical(sort(as.integer(coverage)), seq_len(nrow(values)) + 1L))
   stop("AUDIT ERROR: an original input row was lost or used more than once")
+
+# After auditing every original row, a manual primary choice may discard OTHER
+# identifier partitions. Never absorb a row with conflicting SIC/Column2.
+manual_dropped <- list()
+manual_dropped_n <- 0L
+if (resolution_mode && !is.null(overrides) && nrow(overrides)) {
+  for (id in overrides$life_id) {
+    positions <- which(vapply(final, function(r) r$id == id, logical(1L)))
+    if (length(positions) < 2L) next
+    chosen <- positions[vapply(final[positions], function(r)
+      override_row(id) %in% r$sources, logical(1L))]
+    if (length(chosen) != 1L) stop("Manual primary row cannot uniquely resolve ", id)
+    discarded <- setdiff(positions, chosen)
+    for (j in discarded) {
+      manual_dropped_n <- manual_dropped_n + length(final[[j]]$sources)
+      manual_dropped[[length(manual_dropped) + 1L]] <-
+        data.frame(life_id = id, selected_input_csv_row = override_row(id),
+          discarded_input_csv_rows = source_ids(final[[j]]),
+          reason = "different_identifier_partition_not_merged", stringsAsFactors = FALSE)
+    }
+    final <- final[-discarded]
+  }
+}
 
 # ---- 4. Assemble selected rows (no output yet) -----------------------------
 output_cols <- setdiff(names(values), all_empty)
@@ -504,9 +582,14 @@ resolve_ids <- function(x, source) {
     candidates <- which(!is.na(canonical_main) &
                         canonical_main == canon_id(raw_id[i]))
     if (length(candidates) == 1L) ans[i] <- candidates
-    if (length(candidates) > 1L)
-      add_issue(source, raw_id[i], "ambiguous_id_alias",
-                paste(main_ids[candidates], collapse = " | "))
+    if (length(candidates) > 1L) {
+      selected <- review_choice(source, raw_id[i], "ambiguous_id_alias")
+      target <- if (is.null(selected)) NA_integer_ else
+        match(selected$candidate_life_id, main_ids)
+      if (!is.na(target) && target %in% candidates) ans[i] <- target else
+        add_issue(source, raw_id[i], "ambiguous_id_alias",
+                  paste(main_ids[candidates], collapse = " | "))
+    }
   }
   ans
 }
@@ -522,90 +605,7 @@ add_coverage <- function(source, column, matched, nonmissing, duplicates, note =
     note = note, stringsAsFactors = FALSE)
 }
 
-# ---- 6. Group CSVs: five measures from each of 16 ROI HEP files -----------
-# ECG ROI and epoch counts are stored WITH the HEP data, not separate files.
-# Only *roi_HEP.csv files are opened; unrelated CSV files are ignored.
-group_dir <- file.path(life, "derivatives/group")
-if (!dir.exists(group_dir)) stop("Group directory missing: ", group_dir)
-hep_files <- sort(list.files(group_dir, pattern = "roi_HEP[.]csv$",
-                             full.names = TRUE, recursive = FALSE, ignore.case = TRUE))
-if (!length(hep_files)) stop("No *roi_HEP.csv files in ", group_dir)
-if (length(hep_files) != 16L)
-  warning("Expected 16 roi_HEP.csv files, found ", length(hep_files))
-
-pipeline_stems <- sub("(?i)_roi_HEP[.]csv$", "", basename(hep_files), perl = TRUE)
-hep_names <- paste0(pipeline_stems, "_roi_HEP")
-roi_fields <- c("roi_HEP", "roi_ECG", "n_epochs_total",
-                "n_epochs_rejected", "n_epochs_kept")
-new_group_cols <- unlist(lapply(pipeline_stems, function(stem)
-  paste0(stem, "_", roi_fields)), use.names = FALSE)
-if (anyDuplicated(new_group_cols) || any(new_group_cols %in% names(result_data)))
-  stop("Group filename-derived column names collide with existing data")
-
-for (i in seq_along(hep_files)) {
-  filename <- hep_files[i]
-  source <- basename(filename)
-  tab <- read_csv(filename)
-  names(tab) <- trimws(names(tab))
-  if (anyDuplicated(names(tab))) stop("Duplicate headers in ", source)
-  needed <- c("subject_id", roi_fields)
-  if (!all(needed %in% names(tab)))
-    stop("Missing columns in ", source, ": ",
-         paste(setdiff(needed, names(tab)), collapse = ", "))
-
-  keys <- resolve_ids(tab$subject_id, source)
-  matched <- unique(keys[!is.na(keys)])
-  repeated <- sum(table(keys[!is.na(keys)]) > 1L)
-  for (field in roi_fields) {
-    label <- paste0(pipeline_stems[i], "_", field)
-    source_values <- normalize(tab[[field]])
-    vals <- rep(NA_character_, length(main_ids))
-    for (k in matched) {
-      indices <- which(keys == k)
-      nonmissing <- unique(source_values[indices][!is.na(source_values[indices])])
-      if (length(nonmissing) == 1L) vals[k] <- nonmissing
-      if (length(nonmissing) > 1L)
-        add_issue(source, main_ids[k], paste0("conflicting_", field, "_duplicates"),
-                  paste(length(indices), "input rows; value left missing"))
-    }
-    # add_column replicates every matched value to all unresolved LIFE rows.
-    add_column(label, vals)
-    add_coverage(source, label, length(matched), sum(!is.na(vals)), repeated)
-  }
-}
-
-# ---- 7. Preprocessing log ODS: later a5 supersedes a1/a2 -------------------
-if (!requireNamespace("readODS", quietly = TRUE))
-  stop("Please install readODS before running: install.packages('readODS')")
-pre_path <- file.path(life, "tabular/preprocessing_logs.ods")
-if (!file.exists(pre_path)) stop("Missing preprocessing log: ", pre_path)
-pre <- as.data.frame(readODS::read_ods(pre_path, sheet = 1),
-                     check.names = FALSE, stringsAsFactors = FALSE)
-if (!all(c("subject_id", "step", "hp_0.1", "hp_0.5") %in% names(pre)))
-  stop("preprocessing_logs.ods must have subject_id, step, hp_0.1, hp_0.5; found: ",
-       paste(names(pre), collapse = ", "))
-pre[] <- lapply(pre, normalize)
-pre_keys <- resolve_ids(pre$subject_id, "preprocessing_logs.ods")
-pre_step <- tolower(pre$step)
-pre_matched <- unique(pre_keys[!is.na(pre_keys)])
-pre_repeated <- sum(table(pre_keys[!is.na(pre_keys)]) > 1L)
-for (src in c("hp_0.1", "hp_0.5")) {
-  v <- rep(NA_character_, length(main_ids))
-  for (k in pre_matched) {
-    valid <- which(pre_keys == k & !is.na(pre[[src]]))
-    if (!length(valid)) next
-    # Prefer the last nonmissing a5 result; otherwise the last nonmissing row.
-    a5 <- valid[!is.na(pre_step[valid]) & pre_step[valid] == "a5"]
-    chosen <- if (length(a5)) tail(a5, 1L) else tail(valid, 1L)
-    v[k] <- pre[[src]][chosen]
-  }
-  new <- paste0("preproc_", src)
-  add_column(new, v)
-  add_coverage("preprocessing_logs.ods", new, length(pre_matched),
-               sum(!is.na(v)), pre_repeated, "last available; a5 takes precedence")
-}
-
-# ---- 8. CER-S: read the correctly separated XLSX, never repeated headers ---
+# ---- 6. CER-S: read the correctly separated XLSX, never repeated headers ---
 if (!requireNamespace("readxl", quietly = TRUE))
   stop("Please install readxl: install.packages('readxl')")
 ecga_path <- file.path(life, "tabular/AMPS_CER-S/ECGAna_allSubj.xlsx")
@@ -673,13 +673,22 @@ for (k in matched_ecga) {
     v[] <- lapply(v, normalize)
     if (any(vapply(v, function(x)
       length(unique(x[!is.na(x)])) > 1L, logical(1L)))) {
-      add_issue("ECGAna_allSubj.xlsx", main_ids[k], "conflicting_equal_priority_ecg_files",
-                paste(basename(ecga_files[chosen]), collapse = " | "))
-      next
+      manual_index <- review_source_row("ECGAna_allSubj.xlsx", main_ids[k],
+        "conflicting_equal_priority_ecg_files")
+      if (!is.na(manual_index) && manual_index %in% chosen) {
+        chosen <- manual_index
+      } else {
+        add_issue("ECGAna_allSubj.xlsx", main_ids[k], "conflicting_equal_priority_ecg_files",
+                  paste(basename(ecga_files[chosen]), collapse = " | "))
+        next
+      }
     }
     # Equal-priority duplicates with compatible values: choose the most complete.
-    completeness <- rowSums(!is.na(v))
-    chosen <- chosen[which.max(completeness)]
+    # A manually chosen conflicting row is already unique and must be retained.
+    if (length(chosen) > 1L) {
+      completeness <- rowSums(!is.na(v))
+      chosen <- chosen[which.max(completeness)]
+    }
   }
   for (col in beats) beat_values[[col]][k] <- normalize(ecga[[col]][chosen])
 }
@@ -692,7 +701,7 @@ for (j in seq_along(beats)) {
                "_Ruhe_2 preferred for duplicated ECG filenames")
 }
 
-# ---- 9. GAD-7: match questionnaire SIC to Column2/sic, then IDmatch alias --
+# ---- 7. GAD-7: match questionnaire SIC to Column2/sic, then IDmatch alias --
 if (!requireNamespace("readxl", quietly = TRUE))
   stop("Please install readxl: install.packages('readxl')")
 gad_path <- file.path(life, "tabular/Behavior/data/PV0491_T00019_NODUP.xlsx")
@@ -738,14 +747,21 @@ format_gad_date <- function(x, date_field = "GAD7_DATUM") {
   output[other] <- NA_character_
   output
 }
-gad$GAD7_DATUM <- format_gad_date(gad$GAD7_DATUM)
-gad$GAD7_DATUM <- as.character(as.Date(gad$GAD7_DATUM) + 1462L)
+# The GAD-7 and MEDANAMEEG workbooks use the Excel 1904 date system.
+# Their serialized dates need the 1462-day offset after 1900-system parsing.
+shift_date_1462 <- function(x) {
+  as.character(as.Date(x, format = "%Y-%m-%d") + 1462L)
+}
+gad$GAD7_DATUM <- shift_date_1462(format_gad_date(gad$GAD7_DATUM))
 gad_key <- normalize_id(gad$GAD7_SIC)
 
-# Include identifiers from ALL ORIGINAL tabular rows, even if they were later
-# absorbed into one selected row. Never use life_id itself as a GAD7_SIC alias.
+# Include identifiers from all compatible absorbed rows, but NEVER reuse an
+# identifier belonging to an incompatible partition manually discarded above.
+# Never use life_id itself as a GAD7_SIC alias.
+retained_rows <- unique(unlist(lapply(final, `[[`, "sources"), use.names = FALSE)) - 1L
+alias_values <- values[retained_rows, , drop = FALSE]
 direct_aliases <- lapply(main_ids, function(id) {
-  x <- values[values$life_id == id, c("Column2", sic), drop = FALSE]
+  x <- alias_values[alias_values$life_id == id, c("Column2", sic), drop = FALSE]
   unique(na.omit(normalize_id(unlist(x, use.names = FALSE))))
 })
 
@@ -798,25 +814,33 @@ gad_selected <- rep(NA_integer_, length(main_ids))
 for (k in seq_along(main_ids)) {
   hit <- unique(gad_hits[[k]])
   if (!length(hit)) next
-  if (any(claim_counts[hit] > 1L)) {
-    add_issue("GAD7", main_ids[k], "shared_questionnaire_identifier",
-              "At least one GAD7_SIC matches multiple LIFE participants")
-    next
-  }
-  if (length(hit) > 1L) {
-    add_issue("GAD7", main_ids[k], "multiple_questionnaire_rows",
-              paste("Matching Excel rows:", paste(hit + 1L, collapse = " | ")))
+  gad_problem <- if (any(claim_counts[hit] > 1L))
+    "shared_questionnaire_identifier" else if (length(hit) > 1L)
+    "multiple_questionnaire_rows" else NA_character_
+  if (!is.na(gad_problem)) {
+    manual_index <- review_source_row("GAD7", main_ids[k], gad_problem)
+    if (!is.na(manual_index) && manual_index %in% hit) {
+      gad_selected[k] <- manual_index
+    } else if (gad_problem == "shared_questionnaire_identifier") {
+      add_issue("GAD7", main_ids[k], gad_problem,
+                "At least one GAD7_SIC matches multiple LIFE participants")
+    } else {
+      add_issue("GAD7", main_ids[k], gad_problem,
+                paste("Matching Excel rows:", paste(hit + 1L, collapse = " | ")))
+    }
     next
   }
   gad_selected[k] <- hit
 }
+if (anyDuplicated(gad_selected[!is.na(gad_selected)]))
+  stop("Manual GAD-7 decisions assign one questionnaire row to multiple participants")
 
 for (col in gad_columns) {
-  output_col <- if (col == "GAD7_DATUM") "date_gad7" else col
   matched_values <- rep(NA_character_, length(main_ids))
   has_match <- which(!is.na(gad_selected))
   if (length(has_match)) matched_values[has_match] <- gad[[col]][gad_selected[has_match]]
-  add_column(output_col, matched_values) # Same value on EVERY final row of a LIFE ID.
+  output_col <- if (col == "GAD7_DATUM") "date_gad7" else col
+  add_column(output_col, matched_values)  # Same value on EVERY final row of a LIFE ID.
   add_coverage("PV0491_T00019_NODUP.xlsx", output_col, length(has_match),
                sum(!is.na(matched_values)), sum(table(gad_key[!is.na(gad_key)]) > 1L),
                "GAD7_SIC via Column2/sic; IDmatch alias only if unmatched")
@@ -825,7 +849,7 @@ gad_direct_n <- sum(!is.na(gad_selected) & gad_method == "direct_Column2_or_sic"
 gad_fallback_n <- sum(!is.na(gad_selected) & gad_method == "IDmatch_sheet_alias")
 gad_ambiguous_n <- sum(lengths(gad_hits) > 0L & is.na(gad_selected))
 
-# ---- 10. MEDANAMEEG: neurological history, keyed by LIFE participant ID ---
+# ---- 8. MEDANAMEEG: neurological history, keyed by LIFE participant ID ---
 # No fuzzy matching beyond the same exact/unique canonical-ID logic used above.
 med_file <- file.path(life, "tabular/Behavior/data/PV0426_T00399_NODUP.xlsx")
 if (!file.exists(med_file)) stop("Missing MEDANAMEEG workbook: ", med_file)
@@ -843,9 +867,8 @@ if (!all(c("MEDANAMEEG_SIC", med_sources) %in% names(med)))
   stop("MEDANAMEEG workbook missing: ",
        paste(setdiff(c("MEDANAMEEG_SIC", med_sources), names(med)), collapse = ", "))
 med[] <- lapply(med, normalize)
-med$MEDANAMEEG_DATUM <- format_gad_date(med$MEDANAMEEG_DATUM,
-                                         "MEDANAMEEG_DATUM")
-med$MEDANAMEEG_DATUM <- as.character(as.Date(med$MEDANAMEEG_DATUM) + 1462L)
+med$MEDANAMEEG_DATUM <- shift_date_1462(format_gad_date(
+  med$MEDANAMEEG_DATUM, "MEDANAMEEG_DATUM"))
 med_keys <- resolve_ids(med$MEDANAMEEG_SIC, basename(med_file))
 med_matched <- unique(med_keys[!is.na(med_keys)])
 med_repeated <- sum(table(med_keys[!is.na(med_keys)]) > 1L)
@@ -858,17 +881,23 @@ for (j in seq_along(med_sources)) {
     nonmissing <- unique(med[[source_field]][indices])
     nonmissing <- nonmissing[!is.na(nonmissing)]
     if (length(nonmissing) == 1L) vals[k] <- nonmissing
-    if (length(nonmissing) > 1L)
-      add_issue(basename(med_file), main_ids[k],
-                paste0("conflicting_", source_field, "_duplicates"),
-                paste(length(indices), "input rows; value left missing"))
+    if (length(nonmissing) > 1L) {
+      issue_type <- paste0("conflicting_", source_field, "_duplicates")
+      manual_index <- review_source_row(basename(med_file), main_ids[k],
+                                        issue_type, source_field)
+      if (!is.na(manual_index) && manual_index %in% indices &&
+          !is.na(med[[source_field]][manual_index]))
+        vals[k] <- med[[source_field]][manual_index]
+      else add_issue(basename(med_file), main_ids[k], issue_type,
+                     paste(length(indices), "input rows; value left missing"))
+    }
   }
   add_column(target_field, vals)
   add_coverage(basename(med_file), target_field, length(med_matched),
                sum(!is.na(vals)), med_repeated)
 }
 
-# ---- 10a. CNS medication exclusion: participant-level LIFE ID -------------
+# ---- 8a. CNS medication exclusion: participant-level LIFE ID -------------
 medications_path <- file.path(life,
   "derivatives/matching_and_summaries/medications/LIFE_medications_by_ID.csv")
 if (!file.exists(medications_path))
@@ -887,15 +916,21 @@ for (k in medication_matched) {
   matches <- which(medication_keys == k)
   distinct <- unique(na.omit(medication_source[matches]))
   if (length(distinct) == 1L) medication_values[k] <- distinct
-  if (length(distinct) > 1L)
-    add_issue(basename(medications_path), main_ids[k],
+  if (length(distinct) > 1L) {
+    manual_index <- review_source_row(basename(medications_path), main_ids[k],
+                                       "conflicting_cns_exclude_definite", "cns_exclude_definite")
+    if (!is.na(manual_index) && manual_index %in% matches &&
+        !is.na(medication_source[manual_index]))
+      medication_values[k] <- medication_source[manual_index]
+    else add_issue(basename(medications_path), main_ids[k],
       "conflicting_cns_exclude_definite", "Conflicting duplicate rows; left missing")
+  }
 }
 add_column("medications_cns_exclude_definite", medication_values)
 add_coverage(basename(medications_path), "medications_cns_exclude_definite",
   length(medication_matched), sum(!is.na(medication_values)), medication_repeated)
 
-# ---- 10b. Echo LVOT stroke volume: match pseudonym to Column2 or SIC ------
+# ---- 8b. Echo LVOT stroke volume: match pseudonym to Column2 or SIC ------
 echo_path <- file.path(life, "tabular/Behavior/data/PV491_T01092_ECHO_LVOT.csv")
 if (!file.exists(echo_path)) stop("Missing ECHO LVOT file: ", echo_path)
 echo_fields <- c("ECHO_READ_STUDYDATETIME", "ECHO_READ_AGE", "ECHO_READ_LVOT_SV")
@@ -922,11 +957,6 @@ echo <- read_echo(echo_path)
 if (anyDuplicated(names(echo)[-1L])) stop("Duplicate ECHO measurement headers")
 echo[] <- lapply(echo, normalize)
 echo_pseudonym <- normalize_id(echo[[1L]])
-echo$ECHO_READ_STUDYDATETIME <- sub(
-  "^([0-9]{4})\\.([0-9]{2})\\.([0-9]{2}) [0-9]{2}:[0-9]{2}:[0-9]{2}$",
-  "\\1-\\2-\\3",
-  echo$ECHO_READ_STUDYDATETIME
-)
 echo$ECHO_READ_STUDYDATETIME <- format_gad_date(
   echo$ECHO_READ_STUDYDATETIME, "ECHO_READ_STUDYDATETIME")
 
@@ -940,9 +970,15 @@ echo_keys <- rep(NA_integer_, nrow(echo))
 for (i in which(!is.na(echo_pseudonym))) {
   candidates <- unique(alias_map[[echo_pseudonym[i]]])
   if (length(candidates) == 1L) echo_keys[i] <- candidates
-  if (length(candidates) > 1L)
-    add_issue(basename(echo_path), echo_pseudonym[i],
-      "shared_echo_pseudonym", paste(main_ids[candidates], collapse = " | "))
+  if (length(candidates) > 1L) {
+    selected <- review_choice(basename(echo_path), echo_pseudonym[i],
+                              "shared_echo_pseudonym")
+    target <- if (is.null(selected)) NA_integer_ else
+      match(selected$candidate_life_id, main_ids)
+    if (!is.na(target) && target %in% candidates) echo_keys[i] <- target else
+      add_issue(basename(echo_path), echo_pseudonym[i],
+        "shared_echo_pseudonym", paste(main_ids[candidates], collapse = " | "))
+  }
 }
 echo_matched <- unique(echo_keys[!is.na(echo_keys)])
 echo_repeated <- sum(table(echo_keys[!is.na(echo_keys)]) > 1L)
@@ -965,10 +1001,16 @@ for (j in seq_along(echo_fields)) {
     matches <- which(echo_keys == k)
     distinct <- unique(na.omit(echo[[source_col]][matches]))
     if (length(distinct) == 1L) vals[k] <- distinct
-    if (length(distinct) > 1L)
-      add_issue(basename(echo_path), main_ids[k],
-        paste0("conflicting_", source_col, "_duplicates"),
+    if (length(distinct) > 1L) {
+      issue_type <- paste0("conflicting_", source_col, "_duplicates")
+      manual_index <- review_source_row(basename(echo_path), main_ids[k],
+                                        issue_type, source_col)
+      if (!is.na(manual_index) && manual_index %in% matches &&
+          !is.na(echo[[source_col]][manual_index]))
+        vals[k] <- echo[[source_col]][manual_index]
+      else add_issue(basename(echo_path), main_ids[k], issue_type,
         paste(length(matches), "ECHO rows; value left missing"))
+    }
   }
   add_column(output_col, vals)
   add_coverage(basename(echo_path), output_col, length(echo_matched),
@@ -976,7 +1018,7 @@ for (j in seq_along(echo_fields)) {
                "ECHO pseudonym matched to original Column2/SIC aliases")
 }
 
-# ---- 11. HR/HRV: import all measurements by participant ID ---------------
+# ---- 9. HR/HRV: import all measurements by participant ID ---------------
 # Keep the names from the source file; only prefix when a name already exists.
 hrv_path <- file.path(life, "derivatives/HR_HRV_all_participants.csv")
 if (!file.exists(hrv_path)) stop("Missing HR/HRV file: ", hrv_path)
@@ -1010,17 +1052,23 @@ for (src in hrv_fields) {
     matches <- which(hrv_keys == k)
     nonmissing <- unique(original[matches][!is.na(original[matches])])
     if (length(nonmissing) == 1L) vals[k] <- nonmissing
-    if (length(nonmissing) > 1L)
-      add_issue("HR_HRV_all_participants.csv", main_ids[k],
-                "conflicting_duplicate_measurements",
-                paste(src, ": ", length(nonmissing), " different values; left missing"))
+    if (length(nonmissing) > 1L) {
+      manual_index <- review_source_row("HR_HRV_all_participants.csv", main_ids[k],
+        "conflicting_duplicate_measurements", src)
+      if (!is.na(manual_index) && manual_index %in% matches &&
+          !is.na(original[manual_index]))
+        vals[k] <- original[manual_index]
+      else add_issue("HR_HRV_all_participants.csv", main_ids[k],
+        "conflicting_duplicate_measurements",
+        paste(src, ": ", length(nonmissing), " different values; left missing"))
+    }
   }
   add_column(label, vals)
   add_coverage("HR_HRV_all_participants.csv", label, length(hrv_matched),
                sum(!is.na(vals)), hrv_repeated)
 }
 
-# ---- 12. Derived participant-level values ---------------------------------
+# ---- 10. Derived participant-level values ---------------------------------
 # Scores are calculated for each output row; external measurements already
 # repeat identically across unresolved duplicate rows of the same LIFE ID.
 # All questionnaire items must be coded 0,1,2,3. Unexpected values become NA.
@@ -1130,36 +1178,56 @@ result_data$extrasystolic_exclusion <- ifelse(
   as.integer(result_data$extrasystolic_N_SD > 4)
 )
 
-# HEP z-score in SD units and |z| > 3 outlier flag for each pipeline.
-# Unresolved duplicated LIFE IDs do NOT get extra statistical weight.
-# Derived values are replicated onto every row of the same participant.
-hep_outlier_counts <- setNames(integer(length(hep_names)), hep_names)
-for (label in hep_names) {
-  src <- positive_number(result_data[[label]])
-  unique_pos <- !duplicated(result_data$life_id)
-  reference <- src[unique_pos]
-  mu <- if (any(!is.na(reference))) mean(reference, na.rm = TRUE) else NA_real_
-  sigma <- if (sum(!is.na(reference)) >= 2L) sd(reference, na.rm = TRUE) else NA_real_
-  z <- if (is.finite(sigma) && sigma > 0) (src - mu) / sigma else
-    rep(NA_real_, length(src))
-  z_name <- paste0(label, "_SD")
-  flag_name <- paste0(label, "_outliers")
-  if (z_name %in% names(result_data) || flag_name %in% names(result_data))
-    stop("Derived HEP column name collision: ", label)
-  result_data[[z_name]] <- z
-  result_data[[flag_name]] <- ifelse(is.na(z), NA_integer_, as.integer(abs(z) > 3))
-  hep_outlier_counts[label] <- sum(result_data[[flag_name]][unique_pos] == 1L,
-                                  na.rm = TRUE)
+# ---- 11. Save ONLY useful compact outputs ------------------------------
+# Do not silently ignore a manual choice if the candidates changed as a
+# consequence of selecting a different participant/identifier partition.
+if (resolution_mode && nrow(issue_review)) {
+  selected <- issue_review[yes(issue_review$select), , drop = FALSE]
+  chosen_keys <- paste(selected$source, selected$life_id,
+                       selected$issue, ifelse(is.na(selected$field), "", selected$field),
+                       sep = "\035")
+  unused <- setdiff(chosen_keys, consumed_decisions)
+  if (length(unused))
+    stop("One or more selected external-source decisions were not used; ",
+         "review source candidates after the primary-row choice")
 }
-
-# ---- 13. Save ONLY useful compact outputs ------------------------------
+# Only explicitly acknowledged missing/unresolvable source problems may remain.
+# Manual selections that unexpectedly produce NEW conflicts fail before data.csv.
+if (resolution_mode && length(issues)) {
+  blank <- function(x) ifelse(is.na(x), "", x)
+  issue_field <- function(source, problem, details) {
+    if (identical(source, "HR_HRV_all_participants.csv") &&
+        identical(problem, "conflicting_duplicate_measurements"))
+      return(trimws(sub(":.*$", "", details)))
+    if (identical(problem, "conflicting_cns_exclude_definite"))
+      return("cns_exclude_definite")
+    if (grepl("^conflicting_.*_duplicates$", problem))
+      return(sub("_duplicates$", "", sub("^conflicting_", "", problem)))
+    ""
+  }
+  for (entry in issues) {
+    source <- entry$source[[1L]]
+    id <- entry$life_id[[1L]]
+    problem <- entry$issue[[1L]]
+    field <- issue_field(source, problem, entry$details[[1L]])
+    reviewed <- which(blank(issue_review$source) == source &
+      blank(issue_review$life_id) == id & blank(issue_review$issue) == problem &
+      blank(issue_review$field) == field &
+      blank(issue_review$resolution) == "keep_missing")
+    if (!length(reviewed)) stop("New or unreviewed matching issue after manual selection: ",
+                                source, " / ", id, " / ", problem, " / ", field)
+  }
+}
 if (anyDuplicated(names(result_data))) stop("Duplicate output column names")
 if (nrow(result_data) != length(final)) stop("Internal error: row count changed")
 if (!identical(result_data[["non-unique"]],
                as.integer(table(result_data$life_id)[result_data$life_id] > 1L)))
   stop("Internal error: non-unique flag does not match final IDs")
-# Analysis data lives at derivatives/data.csv; diagnostics stay in out/.
-data_path <- file.path(life, "derivatives", "data.csv")
+# Preparation writes an intermediate; only validated resolution writes data.csv.
+if (resolution_mode && anyDuplicated(result_data$life_id))
+  stop("Unresolved duplicate LIFE participants remain after manual primary selection")
+data_path <- if (resolution_mode) file.path(life, "derivatives", "data.csv") else
+  file.path(out, "data_pre_review.csv")
 write.csv(result_data, data_path, na = "", row.names = FALSE)
 
 # Row provenance: original source row numbers + choices, without all cell values.
@@ -1171,7 +1239,8 @@ provenance <- do.call(rbind, lapply(seq_along(final), function(i) {
     n_input_rows_merged = length(r$sources), selection_rule = r$reason,
     n_alternative_eeg_dates = length(r$alts), stringsAsFactors = FALSE)
 }))
-write_csv(provenance, "data_row_provenance.csv")
+write_csv(provenance, if (resolution_mode) "data_final_row_provenance.csv" else
+  "data_row_provenance.csv")
 
 file_info <- function(id) {
   f <- recordings[!is.na(recordings$life_id) & recordings$life_id == id, , drop = FALSE]
@@ -1199,7 +1268,8 @@ for (id in unique(result_data$life_id[result_data[["non-unique"]] == 1L])) {
 unresolved_cols <- c("life_id", "n_rows", "data_csv_rows", "primary_input_csv_rows",
   "eeg_dates", "eeg_groups", "recording_paths", "selected_recording_path",
   "selection_rules")
-write_csv(bind_events(unresolved, unresolved_cols), "data_unresolved_rows.csv")
+write_csv(bind_events(unresolved, unresolved_cols),
+  if (resolution_mode) "data_final_unresolved_rows.csv" else "data_unresolved_rows.csv")
 # Dates and candidate SICs/Excel row numbers help manual matching, without
 # dumping full source rows into the audit. All values reflect original matches.
 issue_cols <- c("source", "life_id", "issue", "details")
@@ -1232,7 +1302,139 @@ for (i in seq_len(nrow(issue_table))) {
     issue_table$gad7_excel_rows[i] <- joined(candidates + 1L)
   }
 }
-write_csv(issue_table, "data_match_issues.csv")
+write_csv(issue_table, if (resolution_mode) "data_final_match_issues.csv" else
+  "data_match_issues.csv")
+
+# ---- 11a. Candidate-level manual review templates (never overwrite edits) ---
+if (!resolution_mode) {
+  dir.create(manual_dir, recursive = TRUE, showWarnings = FALSE)
+  input_path <- file.path(out, "IDmatch_EEG.csv")
+  primary_ids <- unique(result_data$life_id[result_data[["non-unique"]] == 1L])
+  original_idx <- which(values$life_id %in% primary_ids)
+  primary_paths <- vapply(values$life_id[original_idx], function(id)
+    file_info(id)$paths, character(1L))
+  primary_template <- data.frame(
+    life_id = values$life_id[original_idx],
+    input_csv_row = as.character(original_idx + 1L),
+    Column2 = values$Column2[original_idx],
+    sic = values[[sic]][original_idx],
+    eeg_group = values[[grp]][original_idx],
+    eeg_date = values[[dt]][original_idx],
+    core_eeg_fields = as.character(rowSums(!is.na(values[original_idx, core_eeg,
+                                                     drop = FALSE]))),
+    vigall_fields = as.character(rowSums(!is.na(values[original_idx, vigall,
+                                                   drop = FALSE]))),
+    recording_paths = unname(primary_paths),
+    source_path = rep(input_path, length(original_idx)),
+    source_md5 = rep(unname(tools::md5sum(input_path)), length(original_idx)),
+    mapping_md5 = rep(unname(tools::md5sum(file.path(out,
+      "IDmatch_variables_manual.csv"))), length(original_idx)),
+    select_primary = "", review_note = "", stringsAsFactors = FALSE)
+  # source_path/hash are repeated on every candidate to detect stale decisions.
+  write_csv(primary_template, "data_unresolved_rows_template.csv")
+  if (!file.exists(manual_primary_path))
+    write.csv(primary_template, manual_primary_path, na = "", row.names = FALSE)
+
+  issue_paths <- c(
+    "ECGAna_allSubj.xlsx" = ecga_path, "GAD7" = gad_path,
+    setNames(med_file, basename(med_file)),
+    setNames(medications_path, basename(medications_path)),
+    setNames(echo_path, basename(echo_path)),
+    "HR_HRV_all_participants.csv" = hrv_path)
+  issue_hashes <- tools::md5sum(unname(issue_paths))
+  matching_hash <- unname(tools::md5sum(input_path))
+  mapping_hash <- unname(tools::md5sum(file.path(out, "IDmatch_variables_manual.csv")))
+  review_candidates <- list()
+  add_candidates <- function(source, id, issue_type, field = "", rows = integer(),
+                             owner_ids = character(), source_ids = character(),
+                             preview = character()) {
+    size <- max(length(rows), length(owner_ids), 1L)
+    if (length(rows) && length(rows) != size) stop("Bad candidate row lengths")
+    if (length(owner_ids) && length(owner_ids) != size) stop("Bad owner ID lengths")
+    path <- unname(issue_paths[source])
+    if (length(path) != 1L || is.na(path) || !file.exists(path))
+      stop("Missing source file for review issue: ", source)
+    expand <- function(x) if (length(x)) as.character(x) else rep("", size)
+    review_candidates[[length(review_candidates) + 1L]] <<- data.frame(
+      source = source, life_id = id, issue = issue_type, field = field,
+      source_row = if (length(rows)) as.character(rows + 1L) else rep("", size),
+      candidate_life_id = expand(owner_ids),
+      candidate_identifier = expand(source_ids),
+      candidate_value = expand(preview), source_path = path,
+      source_md5 = unname(issue_hashes[path]),
+      matching_input_md5 = matching_hash, mapping_md5 = mapping_hash,
+      select = "", resolution = if (issue_type == "no_numeric_beat_counts")
+        "keep_missing" else "", review_note = "", stringsAsFactors = FALSE)
+  }
+  for (i in seq_len(nrow(issue_table))) {
+    source <- issue_table$source[i]
+    id <- issue_table$life_id[i]
+    problem <- issue_table$issue[i]
+    k <- match(id, main_ids)
+    if (problem == "ambiguous_id_alias") {
+      possible <- main_ids[!is.na(canonical_main) & canonical_main == canon_id(id)]
+      add_candidates(source, id, problem, owner_ids = possible,
+                     source_ids = rep(id, length(possible)), preview = possible)
+    } else if (problem == "shared_echo_pseudonym") {
+      possible <- main_ids[unique(alias_map[[id]])]
+      add_candidates(source, id, problem, owner_ids = possible,
+                     source_ids = rep(id, length(possible)), preview = possible)
+    } else if (source == "GAD7") {
+      inds <- if (!is.na(k)) unique(gad_hits[[k]]) else integer()
+      add_candidates(source, id, problem, rows = inds,
+                     source_ids = gad_key[inds],
+                     preview = if (length(inds)) paste0("date=", gad$GAD7_DATUM[inds])
+                       else character())
+    } else if (source == "ECGAna_allSubj.xlsx") {
+      inds <- if (!is.na(k)) which(ecga_keys == k) else integer()
+      if (problem == "conflicting_equal_priority_ecg_files") {
+        inds <- inds[rowSums(!is.na(ecga[inds, beats, drop = FALSE])) > 0L]
+        if (length(inds)) {
+          is2 <- grepl("(?i)_Ruhe_2[.]hea[.]csv$", ecga_files[inds], perl = TRUE)
+          isruhe <- grepl("(?i)_Ruhe(?:_[0-9]+)?[.]hea[.]csv$",
+                          ecga_files[inds], perl = TRUE)
+          p <- as.integer(is2) * 10L + as.integer(isruhe)
+          inds <- inds[p == max(p)]
+        }
+      } else inds <- integer()  # no_numeric_beat_counts: no selectable value
+      add_candidates(source, id, problem, rows = inds,
+        source_ids = ecga_files[inds],
+        preview = if (length(inds)) paste0("N=", ecga[[beats[1L]]][inds], "; V=",
+                         ecga[[beats[2L]]][inds], "; S=", ecga[[beats[3L]]][inds])
+          else character())
+    } else if (source == basename(med_file)) {
+      field <- sub("_duplicates$", "", sub("^conflicting_", "", problem))
+      inds <- if (!is.na(k)) which(med_keys == k & !is.na(med[[field]])) else integer()
+      add_candidates(source, id, problem, field, inds,
+                     source_ids = med$MEDANAMEEG_SIC[inds], preview = med[[field]][inds])
+    } else if (source == basename(medications_path)) {
+      field <- "cns_exclude_definite"
+      inds <- if (!is.na(k)) which(medication_keys == k &
+                                   !is.na(medication_source)) else integer()
+      add_candidates(source, id, problem, field, inds,
+                     source_ids = medications[[1L]][inds],
+                     preview = medication_source[inds])
+    } else if (source == basename(echo_path)) {
+      field <- sub("_duplicates$", "", sub("^conflicting_", "", problem))
+      inds <- if (!is.na(k)) which(echo_keys == k & !is.na(echo[[field]])) else integer()
+      add_candidates(source, id, problem, field, inds,
+                     source_ids = echo_pseudonym[inds], preview = echo[[field]][inds])
+    } else if (source == "HR_HRV_all_participants.csv") {
+      field <- trimws(sub(":.*$", "", issue_table$details[i]))
+      inds <- if (!is.na(k)) which(hrv_keys == k & !is.na(hrv[[field]])) else integer()
+      add_candidates(source, id, problem, field, inds,
+                     source_ids = hrv[[hrv_id_col]][inds], preview = hrv[[field]][inds])
+    } else stop("Unrecognized matching issue for manual template: ", source, "/", problem)
+  }
+  issue_template_cols <- c("source", "life_id", "issue", "field", "source_row",
+    "candidate_life_id", "candidate_identifier", "candidate_value",
+    "source_path", "source_md5", "matching_input_md5", "mapping_md5",
+    "select", "resolution", "review_note")
+  issue_template <- unique(bind_events(review_candidates, issue_template_cols))
+  write_csv(issue_template, "data_match_issues_template.csv")
+  if (!file.exists(manual_issues_path))
+    write.csv(issue_template, manual_issues_path, na = "", row.names = FALSE)
+}
 
 summary_coverage <- bind_events(coverage, c("source", "column", "participants_found",
                                             "participants_with_value", "source_duplicate_ids", "note"))
@@ -1245,10 +1447,13 @@ report <- capture.output({
   cat("Matched IDmatch input rows:         ", nrow(values), "\n")
   cat("Unique participants:                ", length(main_ids), "\n")
   cat("Participants with repeated inputs: ", n_original_repeated, "\n")
-  cat("Final rows in data.csv:             ", nrow(result_data), "\n")
+  cat("Rows in ", basename(data_path), ": ", nrow(result_data), "\n", sep = "")
   cat("Participants with one final row:    ", sum(table(result_data$life_id) == 1L), "\n")
   cat("Participants still non-unique:      ", n_final_repeated, "\n")
-  cat("Original rows absorbed:            ", nrow(values) - nrow(result_data), "\n")
+  cat("Original rows absorbed:            ",
+      nrow(values) - nrow(result_data) - manual_dropped_n, "\n")
+  if (resolution_mode)
+    cat("Original rows deliberately discarded:", manual_dropped_n, "\n")
   cat("Complementary cells filled:        ", count_cells("filled_from_secondary"), "\n")
   cat("Primary conflicting cells kept:    ", count_cells("kept_primary_conflict"), "\n")
   cat("Secondary VIGALL cells NOT used:   ", count_cells("skipped_secondary_vigall"), "\n")
@@ -1257,8 +1462,6 @@ report <- capture.output({
   cat("Fully empty selected columns dropped:", length(all_empty), "\n")
   cat("EP-EW columns removed:               ", paste(block, collapse = ", "), "\n")
   cat("Final output columns:               ", ncol(result_data), "\n")
-  cat("Group HEP CSVs imported:             ", length(hep_files), "\n")
-  cat("Measures per HEP CSV:                ", paste(roi_fields, collapse = ", "), "\n")
   cat("MEDANAMEEG matched participants:      ", length(med_matched), "\n")
   cat("MEDANAMEEG source duplicate IDs:     ", med_repeated, "\n")
   cat("CNS medication matched participants:  ", length(medication_matched), "\n")
@@ -1282,8 +1485,7 @@ report <- capture.output({
   cat("Extrasystole count SD (unique participants):  ", extra_sd, "\n")
   cat("Extrasystole >4-SD exclusions (unique participants):",
       sum(result_data$extrasystolic_exclusion[extra_unique] == 1L, na.rm = TRUE), "\n")
-  cat("HEP 3-SD outliers, each pipeline (unique participants):\n")
-  print(hep_outlier_counts)
+  cat("Pipeline HEP/ECG/preprocessing imported: NO (deferred until post-exclusion)\n")
   cat("Prior EEG recording inventory loaded:", !is.null(inventory), "\n")
   if (!is.null(participants)) cat("Earlier LIFE matching participants: ", nrow(participants), "\n")
   if (!is.null(prior_duplicates)) cat("Earlier LIFE repeated-row cases:    ", nrow(prior_duplicates), "\n")
@@ -1306,8 +1508,18 @@ report <- capture.output({
   cat("EEG/VIGALL primary row is preserved; VIGALL is NEVER backfilled.\n")
   cat("External source values are replicated across all surviving rows of an ID.\n")
 })
-writeLines(report, file.path(out, "data_summary.txt"))
+writeLines(report, file.path(out,
+  if (resolution_mode) "data_final_summary.txt" else "data_summary.txt"))
+if (resolution_mode) {
+  dropped_cols <- c("life_id", "selected_input_csv_row",
+                    "discarded_input_csv_rows", "reason")
+  write_csv(bind_events(manual_dropped, dropped_cols), "data_manual_dropped_rows.csv")
+}
+
 cat(paste(report, collapse = "\n"), "\n")
 cat("\nSaved analysis data to: ", data_path, "\n", sep = "")
-cat("Saved data_row_provenance.csv, data_unresolved_rows.csv, ",
-    "data_match_issues.csv, data_summary.txt to: ", out, "\n", sep = "")
+if (!resolution_mode){
+  cat("Saved diagnostics and editable manual review files to: ", out, "\n", sep = "")
+}else{
+  cat("Saved final matching provenance, issues, and audit to: ", out, "\n", sep = "")
+}

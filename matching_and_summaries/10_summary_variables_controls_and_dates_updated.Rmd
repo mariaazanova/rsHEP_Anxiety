@@ -1,0 +1,799 @@
+---
+title: "rsHEP & Anxiety (LIFE): Sample Characteristics, Control Variables & Recording Dates"
+date: "`r format(Sys.Date(), '%Y-%m-%d')`"
+params:
+  life_dir: "/data/p_02865/data/LIFE"
+knit: (function(input, ...) {
+    out_dir <- "/data/p_02865/data/LIFE/derivatives/matching_and_summaries/summary_sample_variables_and_dates";
+    dir.create(out_dir, recursive = TRUE, showWarnings = FALSE);
+    rmarkdown::render(input, output_dir = out_dir, envir = globalenv())
+  })
+output:
+  word_document:
+    toc: true
+    toc_depth: 2
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE, warning = FALSE, message = FALSE,
+  fig.width = 6.5, fig.height = 4.2, dpi = 300
+)
+
+library(ggplot2)
+has_ft <- requireNamespace("flextable", quietly = TRUE)
+if (has_ft) {
+  flextable::set_flextable_defaults(
+    font.family = "Calibri", font.size = 9,
+    padding.top = 3, padding.bottom = 3, padding.left = 4, padding.right = 4
+  )
+}
+
+make_tab <- function(df, caption = NULL) {
+  if (has_ft) {
+    ft <- flextable::flextable(df)
+    ft <- flextable::theme_booktabs(ft)
+    ft <- flextable::autofit(ft)
+    ft <- flextable::set_table_properties(
+      ft, width = 1, layout = "autofit",
+      opts_word = list(split = FALSE, repeat_headers = TRUE)
+    )
+    if (!is.null(caption)) ft <- flextable::set_caption(ft, caption = caption)
+    return(ft)
+  }
+  knitr::kable(df, caption = caption, row.names = FALSE)
+}
+
+life    <- params$life_dir
+deriv   <- file.path(life, "derivatives")
+ms_dir  <- file.path(deriv, "matching_and_summaries")
+out_dir <- file.path(ms_dir, "summary_sample_variables_and_dates")
+fig_dir <- file.path(out_dir, "figures")
+dir.create(fig_dir, recursive = TRUE, showWarnings = FALSE)
+
+save_tab <- function(df, name) {
+  write.csv(df, file.path(out_dir, name), row.names = FALSE, na = "")
+}
+
+save_fig <- function(p, name, w = 6.5, h = 4.2) {
+  ggsave(file.path(fig_dir, name), plot = p, width = w, height = h, dpi = 300)
+}
+
+to_num <- function(x) {
+  x <- trimws(as.character(x))
+  x[x %in% c("", "NA", "N/A", "NULL")] <- NA_character_
+  v <- suppressWarnings(as.numeric(gsub(",", ".", x, fixed = TRUE)))
+  v[!is.finite(v)] <- NA_real_
+  v
+}
+
+parse_any_date <- function(x) {
+  x <- trimws(as.character(x))
+  x[x %in% c("", "NA", "N/A", "NULL")] <- NA_character_
+  out <- rep(as.Date(NA), length(x))
+  is_num <- !is.na(x) & grepl("^[0-9]{5}(\\.[0-9]+)?$", x)
+  if (any(is_num)) {
+    out[is_num] <- as.Date(floor(as.numeric(x[is_num])), origin = "1899-12-30")
+  }
+  rem <- which(!is.na(x) & is.na(out))
+  for (fmt in c("%Y-%m-%d", "%d.%m.%Y", "%Y/%m/%d", "%d/%m/%Y")) {
+    if (!length(rem)) break
+    d <- suppressWarnings(as.Date(substr(x[rem], 1, 10), format = fmt))
+    ok <- !is.na(d)
+    if (any(ok)) {
+      out[rem[ok]] <- d[ok]
+      rem <- rem[!ok]
+    }
+  }
+  out
+}
+
+# Load post-exclusion dataset (before pipeline-specific exclusions)
+data_path <- file.path(deriv, "data_after_exclusion.csv")
+if (!file.exists(data_path)) stop("Cannot find data_after_exclusion.csv at: ", data_path)
+raw_df <- read.csv(data_path, colClasses = "character", check.names = FALSE,
+                   stringsAsFactors = FALSE, na.strings = c("", "NA"), fileEncoding = "UTF-8-BOM")
+
+# New covariates must be added by 06b; do not silently revert to older fields.
+required_new <- c("diabetes_final", "lvedv_lvesv", "height")
+missing_new <- setdiff(required_new, names(raw_df))
+if (length(missing_new)) {
+  stop("Missing post-06b control columns: ", paste(missing_new, collapse = ", "),
+       ". Run 06b_LIFE_match_add_controls_after_exclusion.R before knitting.")
+}
+
+n_total_rows <- nrow(raw_df)
+df <- raw_df[!duplicated(raw_df$life_id), , drop = FALSE]
+N <- nrow(df)
+
+# Clean & derive analysis variables safely
+df$GAD7_num   <- to_num(df$GAD7)
+df$age_num    <- to_num(df$age_eeg)
+df$IDS_num    <- ifelse(to_num(df$all_IDS) == 1, to_num(df$IDS), NA_real_)
+df$bmi_num    <- to_num(df$bmi)
+df$sbp_num    <- to_num(df$sbp)
+df$dbp_num    <- to_num(df$dbp)
+df$hr_num     <- to_num(df$HR_bpm)
+df$rmssd_num  <- to_num(df$RMSSD_ms)
+df$sv_num     <- to_num(df$lvedv_lvesv)  # biplane Simpson LVEDV - LVESV, mL
+# Height is descriptive only, not entered into the preregistered control PCA.
+df$height_num <- to_num(df$height)
+df$height_num[df$height_num %in% c(996, 998, 999)] <- NA_real_
+df$ecg_hr_num <- to_num(df$ecg_hr)
+df$extra_num  <- to_num(df$extrasystolic_N)
+df$vig_bc_num <- to_num(df$vigall_b) + to_num(df$vigall_c)
+
+# Sex harmonization (LIFE uses 1=male, 2=female or M/F strings)
+g_raw <- toupper(trimws(as.character(df$gender)))
+df$sex_clean <- ifelse(g_raw %in% c("2", "F", "FEMALE", "W", "WEIBLICH"), "Female",
+                ifelse(g_raw %in% c("1", "M", "MALE", "MAENNLICH", "MÄNNLICH"), "Male", g_raw))
+df$is_female <- ifelse(df$sex_clean == "Female", 1, ifelse(df$sex_clean == "Male", 0, NA_real_))
+
+# Diabetes: ADA 2021-derived ADA_DS as joined by 06b; 1=diabetes, 0=absent.
+# Missing values remain missing. Never substitute an older questionnaire field.
+diab_raw <- trimws(as.character(df$diabetes_final))
+diab_raw[is.na(diab_raw) | !nzchar(diab_raw)] <- NA_character_
+bad_diabetes <- unique(diab_raw[!is.na(diab_raw) & !(diab_raw %in% c("0", "1"))])
+if (length(bad_diabetes)) {
+  stop("Unexpected diabetes_final codes (expected only 0, 1, or missing): ",
+       paste(bad_diabetes, collapse = ", "))
+}
+df$diab_bin <- ifelse(diab_raw == "1", 1,
+               ifelse(diab_raw == "0", 0, NA_real_))
+
+# Anxiety strata
+df$anx_stratum <- ifelse(!is.na(df$GAD7_num) & df$GAD7_num <= 4, "Low (0-4)",
+                  ifelse(!is.na(df$GAD7_num) & df$GAD7_num >= 5 & df$GAD7_num <= 9, "Mild/Middle (5-9)",
+                  ifelse(!is.na(df$GAD7_num) & df$GAD7_num >= 10, "High (10-21)", "Missing")))
+df$anx_stratum <- factor(df$anx_stratum, levels = c("Low (0-4)", "Mild/Middle (5-9)", "High (10-21)"))
+
+# Parse dates
+date_cols <- c("date_eeg", "date_gad7", "date_ids", "date_bp", "date_bmi",
+               "date_ecg", "date_echo", "date_echo_2", "date_medications", "date_med_anamnese")
+date_cols <- intersect(date_cols, names(df))
+for (dc in date_cols) {
+  df[[paste0(dc, "_dt")]] <- parse_any_date(df[[dc]])
+}
+
+df$gap_eeg_gad7_signed <- as.numeric(df$date_eeg_dt - df$date_gad7_dt)
+df$gap_eeg_gad7_abs    <- abs(df$gap_eeg_gad7_signed)
+df$under_30d           <- !is.na(df$gap_eeg_gad7_abs) & df$gap_eeg_gad7_abs < 30
+```
+
+## 1. Sample Scope & Variable Architecture
+
+This document characterizes **`data_after_exclusion.csv`** (`N =` `r N` unique participants; `r n_total_rows` rows), representing the clean population sample **after all preregistered participant-level exclusions** (invalid GAD-7, CNS-active medications, neurological/cardiac conditions, alcohol on EEG day, excessive extrasystoles, and VIGALL drowsiness >15 min) and **before pipeline-specific EEG rejections**. The additional control variables were joined **after common exclusions by script 06b**, using only confirmed one-to-one participant matches. The control-analysis stroke volume is `lvedv_lvesv` (biplane modified Simpson difference, in mL); diabetes is `diabetes_final` (ADA 2021 definition: 0 = no, 1 = yes). Height is displayed descriptively but is not an additional preregistered PCA covariate. As in the original summary, one row per `life_id` is used for descriptive statistics; where IDs have repeated rows, the first is retained for these summaries.
+
+```{r domain-inventory}
+dom_df <- data.frame(
+  Domain = c(
+    "Identifiers & Visit Metadata",
+    "Primary Predictor: Anxiety (GAD-7)",
+    "Demographics (Preregistered Controls & Descriptives)",
+    "Simultaneous 20-min Resting ECG (Controls)",
+    "Psychometric Control: Depression (IDS-SR)",
+    "Cardiometabolic & Exam Controls",
+    "Echocardiography Control",
+    "12-Lead Clinical ECG & Anamnesis",
+    "Vigilance & Extrasystole Screening"
+  ),
+  Columns_in_Dataset = c(
+    "life_id, Column2, sic, group, date_eeg, group2/date_eeg2, group3",
+    "GAD7_GAD7_1..7, all_GAD7, GAD7, gad7_group, date_gad7",
+    "age_eeg, gender (birthdate); height (anthropometry, descriptive only)",
+    "HR_bpm, RMSSD_ms (computed from 20-min EEG/ECG R-peaks)",
+    "IDS_I01..I30, IDS_n_items, all_IDS, IDS, date_ids",
+    "bmi (date_bmi), sbp, dbp (date_bp), diabetes_final (ADA_DS; 0/1)",
+    "lvedv_lvesv = echo_lvedv_mod_bp - echo_lvesv_mod_bp; date_echo",
+    "date_ecg, ecg_hr, ecg_pwave/pq/qrs/qt, hypertension, cardio/med anamnesis flags",
+    "vigall_all_segments, vigall_b, vigall_c, drowsy_15min, ecg_n/v/s_beats, extrasystolic_*"
+  ),
+  Role_in_Registered_Report = c(
+    "Participant linking & temporal gap calculation",
+    "Continuous predictor (H1a,c: 0-21) & Group contrast (H1b,d: 0-4 vs 10-21)",
+    "Age/sex controls (PCA & mediation); height only for sample description",
+    "Control covariates (HR & HRV RMSSD)",
+    "Control covariate (requires complete 28-slot IDS score: all_IDS == 1)",
+    "Control covariates (BMI, systolic/diastolic BP, diabetes presence)",
+    "Control covariate (modified Simpson biplane stroke volume, mL)",
+    "Sample description & QC (12-lead raw waveforms used separately in CFA control)",
+    "Already filtered at common exclusion stage (drowsy <= 15m, extrasystoles <= 4 SD)"
+  ),
+  stringsAsFactors = FALSE
+)
+save_tab(dom_df, "01_dataset_variable_architecture.csv")
+make_tab(dom_df, caption = "Table 1. Overview of variable domains in data_after_exclusion.csv (EEG alpha power is pipeline-specific and joined later).")
+```
+
+---
+
+## 2. Primary Predictor: Trait Anxiety (GAD-7) & Group Sizes
+
+Per Section 2.4.6.3 of the preregistration, we compare the GAD-7 distribution in our post-exclusion EEG sample against the broader LIFE-Adult cohort reported by Hinz et al. (2023; $M = 3.28, SD = 3.16$, ~10% scoring $\ge 10$).
+
+```{r gad7-summary}
+gad_vals <- df$GAD7_num[!is.na(df$GAD7_num)]
+
+gad_item_cols <- paste0("GAD7_GAD7_", 1:7)
+gad_mat <- as.data.frame(lapply(df[gad_item_cols], to_num))
+gad_cc <- gad_mat[complete.cases(gad_mat), ]
+k_items <- ncol(gad_cc)
+cronbach_alpha <- if (nrow(gad_cc) > 10) {
+  item_vars <- sum(apply(gad_cc, 2, var))
+  tot_var   <- var(rowSums(gad_cc))
+  (k_items / (k_items - 1)) * (1 - item_vars / tot_var)
+} else NA_real_
+
+gad_stats <- data.frame(
+  Metric = c(
+    "Valid N (complete 7-item GAD-7)",
+    "Mean (SD)",
+    "Median (IQR; Q25 - Q75)",
+    "Observed Range (Min - Max)",
+    "Internal Consistency (Cronbach's alpha)",
+    "Low Anxiety Group: GAD-7 0-4 (H1b/d Control)",
+    "Mild / Middle Range: GAD-7 5-9 (Continuous H1a/c only)",
+    "High Anxiety Group: GAD-7 10-21 (H1b/d Clinical Cutoff)",
+    "  -> Moderate (GAD-7 10-14)",
+    "  -> Severe (GAD-7 15-21)"
+  ),
+  Sample_Value = c(
+    sprintf("%d / %d (%.1f%%)", length(gad_vals), N, 100 * length(gad_vals) / N),
+    sprintf("%.2f (%.2f)  [LIFE ref: 3.28 (3.16)]", mean(gad_vals), sd(gad_vals)),
+    sprintf("%.1f (%.1f - %.1f)", median(gad_vals), quantile(gad_vals, 0.25), quantile(gad_vals, 0.75)),
+    sprintf("%.0f - %.0f", min(gad_vals), max(gad_vals)),
+    sprintf("%.3f", cronbach_alpha),
+    sprintf("%d (%.1f%%)", sum(gad_vals <= 4), 100 * mean(gad_vals <= 4)),
+    sprintf("%d (%.1f%%)", sum(gad_vals >= 5 & gad_vals <= 9), 100 * mean(gad_vals >= 5 & gad_vals <= 9)),
+    sprintf("%d (%.1f%%)  [Prereg min required: N >= 25]", sum(gad_vals >= 10), 100 * mean(gad_vals >= 10)),
+    sprintf("%d (%.1f%%)", sum(gad_vals >= 10 & gad_vals <= 14), 100 * mean(gad_vals >= 10 & gad_vals <= 14)),
+    sprintf("%d (%.1f%%)", sum(gad_vals >= 15), 100 * mean(gad_vals >= 15))
+  ),
+  stringsAsFactors = FALSE
+)
+save_tab(gad_stats, "02_gad7_distribution_and_groups.csv")
+make_tab(gad_stats, caption = "Table 2. GAD-7 summary statistics and preregistered anxiety group sizes.")
+```
+
+```{r gad7-plot, fig.height=3.6}
+df_gad <- df[!is.na(df$GAD7_num), ]
+p_gad <- ggplot(df_gad, aes(x = GAD7_num, fill = anx_stratum)) +
+  geom_bar(width = 0.78, color = "white", linewidth = 0.2) +
+  geom_vline(xintercept = c(4.5, 9.5), linetype = "dashed", color = "grey25", linewidth = 0.5) +
+  scale_x_continuous(breaks = 0:21) +
+  scale_fill_manual(values = c("Low (0-4)" = "#4E79A7", "Mild/Middle (5-9)" = "#A0CBE8", "High (10-21)" = "#E15759")) +
+  labs(
+    title = "Distribution of GAD-7 Scores in the Post-Exclusion Sample",
+    subtitle = sprintf("N = %d | Mean = %.2f, SD = %.2f, Median = %.0f (dashed lines mark 0-4 and 10-21 cutoffs)",
+                       nrow(df_gad), mean(df_gad$GAD7_num), sd(df_gad$GAD7_num), median(df_gad$GAD7_num)),
+    x = "GAD-7 Total Score", y = "Number of Participants", fill = "Anxiety Stratum"
+  ) +
+  theme_minimal(base_size = 10) +
+  theme(legend.position = "top", panel.grid.minor = element_blank())
+
+save_fig(p_gad, "fig01_gad7_distribution.png", w = 6.5, h = 3.6)
+print(p_gad)
+```
+
+---
+
+## 3. Descriptive Summary of Key & Preregistered Control Variables
+
+Section 2.4.5.2 registers **10 participant-level covariates**, plus **pipeline-specific EEG alpha power** (11 variables in the final control PCA) and the `GAD-7 * EEG-GAD7 gap` interaction. Complete-case counts below include the 10 participant-level controls and the availability of the GAD-7/EEG date gap; **alpha power is not yet included**. Height is not a preregistered control.
+
+```{r continuous-descriptives}
+cont_spec <- list(
+  list(col = "GAD7_num",   label = "GAD-7 Anxiety Score (0-21)"),
+  list(col = "age_num",    label = "Age at EEG (years)"),
+  list(col = "hr_num",     label = "Resting Heart Rate - 20m EEG/ECG (bpm)"),
+  list(col = "rmssd_num",  label = "Heart Rate Variability - RMSSD (ms)"),
+  list(col = "IDS_num",    label = "Depression Score - IDS-SR Complete (0-84)"),
+  list(col = "bmi_num",    label = "Body Mass Index - BMI (kg/m2)"),
+  list(col = "height_num", label = "Height - Anthropometry (cm; descriptive only)"),
+  list(col = "sbp_num",    label = "Systolic Blood Pressure - SBP (mmHg)"),
+  list(col = "dbp_num",    label = "Diastolic Blood Pressure - DBP (mmHg)"),
+  list(col = "sv_num",     label = "Stroke Volume - Biplane LVEDV minus LVESV (mL)"),
+  list(col = "ecg_hr_num", label = "Clinical 12-Lead ECG Heart Rate (bpm)"),
+  list(col = "extra_num",  label = "Extrasystolic Beats in 20m Recording (count)"),
+  list(col = "vig_bc_num", label = "VIGALL Drowsy B+C Segments (sec, <=900)")
+)
+
+desc_rows <- lapply(cont_spec, function(item) {
+  v <- df[[item$col]]
+  v_ok <- v[!is.na(v)]
+  n_ok <- length(v_ok)
+  n_miss <- N - n_ok
+  if (n_ok == 0) {
+    return(data.frame(Variable = item$label, Valid_N = "0", Missing = sprintf("%d (100%%)", N),
+                      Mean_SD = "-", Median_IQR = "-", Min_Max = "-", stringsAsFactors = FALSE))
+  }
+  data.frame(
+    Variable = item$label,
+    Valid_N = as.character(n_ok),
+    Missing = sprintf("%d (%.1f%%)", n_miss, 100 * n_miss / N),
+    Mean_SD = sprintf("%.2f (%.2f)", mean(v_ok), sd(v_ok)),
+    Median_IQR = sprintf("%.2f (%.2f - %.2f)", median(v_ok), quantile(v_ok, 0.25), quantile(v_ok, 0.75)),
+    Min_Max = sprintf("%.1f - %.1f", min(v_ok), max(v_ok)),
+    stringsAsFactors = FALSE
+  )
+})
+desc_df <- do.call(rbind, desc_rows)
+save_tab(desc_df, "03_continuous_variables_summary.csv")
+make_tab(desc_df, caption = "Table 3. Summary statistics and missingness for continuous study variables.")
+```
+
+```{r categorical-descriptives}
+htn_num   <- ifelse(trimws(as.character(df$hypertension)) == "1", 1,
+             ifelse(trimws(as.character(df$hypertension)) == "0", 0, NA_real_))
+med_num   <- ifelse(trimws(as.character(df$takes_medication)) == "1", 1,
+             ifelse(trimws(as.character(df$takes_medication)) == "0", 0, NA_real_))
+depr_self <- ifelse(trimws(as.character(df$depression)) == "1", 1,
+             ifelse(trimws(as.character(df$depression)) == "0", 0, NA_real_))
+
+ctrl_vars_10 <- c("age_num", "is_female", "hr_num", "rmssd_num", "IDS_num",
+                  "diab_bin", "bmi_num", "sbp_num", "dbp_num", "sv_num")
+cc_no_sv  <- complete.cases(df[, setdiff(ctrl_vars_10, "sv_num")]) & !is.na(df$gap_eeg_gad7_abs)
+cc_all_11 <- complete.cases(df[, ctrl_vars_10]) & !is.na(df$gap_eeg_gad7_abs)
+
+cat_df <- data.frame(
+  Variable = c(
+    "Sex: Female (Preregistered Control)",
+    "Diabetes: Yes (ADA_DS / diabetes_final; preregistered)",
+    "Hypertension Flag: Yes (Descriptive)",
+    "Takes Any Non-CNS Medication: Yes (Descriptive)",
+    "Self-Reported Lifetime Depression History: Yes (Descriptive)",
+    "Complete Cases: 9 participant controls (excluding SV) + date gap",
+    "Complete Cases: All 10 participant controls (incl. biplane SV) + date gap"
+  ),
+  Valid_N = c(
+    as.character(sum(!is.na(df$is_female))),
+    as.character(sum(!is.na(df$diab_bin))),
+    as.character(sum(!is.na(htn_num))),
+    as.character(sum(!is.na(med_num))),
+    as.character(sum(!is.na(depr_self))),
+    as.character(N),
+    as.character(N)
+  ),
+  Count_Pct = c(
+    sprintf("%d (%.1f%% Female | %d Male)", sum(df$is_female == 1, na.rm = TRUE),
+            100 * mean(df$is_female == 1, na.rm = TRUE), sum(df$is_female == 0, na.rm = TRUE)),
+    sprintf("%d (%.1f%%)", sum(df$diab_bin == 1, na.rm = TRUE), 100 * mean(df$diab_bin == 1, na.rm = TRUE)),
+    sprintf("%d (%.1f%%)", sum(htn_num == 1, na.rm = TRUE), 100 * mean(htn_num == 1, na.rm = TRUE)),
+    sprintf("%d (%.1f%%)", sum(med_num == 1, na.rm = TRUE), 100 * mean(med_num == 1, na.rm = TRUE)),
+    sprintf("%d (%.1f%%)", sum(depr_self == 1, na.rm = TRUE), 100 * mean(depr_self == 1, na.rm = TRUE)),
+    sprintf("%d (%.1f%% of N = %d)", sum(cc_no_sv), 100 * mean(cc_no_sv), N),
+    sprintf("%d (%.1f%% of N = %d)", sum(cc_all_11), 100 * mean(cc_all_11), N)
+  ),
+  stringsAsFactors = FALSE
+)
+save_tab(cat_df, "04_categorical_and_complete_case_summary.csv")
+make_tab(cat_df, caption = "Table 4. Categorical variables and complete-case availability before adding pipeline-specific alpha power. Diabetes uses ADA_DS (0 = absent, 1 = present; missing stays missing).")
+```
+
+```{r control-distributions-plot, fig.height=5.2}
+dist_vars <- list(
+  "Age at EEG (years)" = df$age_num,
+  "Heart Rate (bpm)" = df$hr_num,
+  "RMSSD HRV (ms, <=150 shown)" = ifelse(df$rmssd_num <= 150, df$rmssd_num, NA_real_),
+  "IDS-SR Depression Score" = df$IDS_num,
+  "BMI (kg/m2)" = df$bmi_num,
+  "Systolic BP (mmHg)" = df$sbp_num,
+  "Diastolic BP (mmHg)" = df$dbp_num,
+  "Echo SV - Biplane (mL)" = df$sv_num
+)
+
+long_dist <- do.call(rbind, lapply(names(dist_vars), function(nm) {
+  v <- dist_vars[[nm]]
+  v <- v[!is.na(v)]
+  if (!length(v)) return(NULL)
+  data.frame(Variable = nm, Value = v, stringsAsFactors = FALSE)
+}))
+long_dist$Variable <- factor(long_dist$Variable, levels = names(dist_vars))
+
+p_dist <- ggplot(long_dist, aes(x = Value)) +
+  geom_histogram(bins = 30, fill = "#4E79A7", color = "white", linewidth = 0.2) +
+  facet_wrap(~ Variable, scales = "free", ncol = 2) +
+  labs(
+    title = "Distributions of Preregistered Continuous Control Variables",
+    subtitle = "Evaluated on post-exclusion sample (RMSSD truncated at 150 ms in plot for readability)",
+    x = NULL, y = "Count"
+  ) +
+  theme_minimal(base_size = 9.5) +
+  theme(panel.grid.minor = element_blank(), strip.text = element_text(face = "bold"))
+
+save_fig(p_dist, "fig02_control_variable_distributions.png", w = 6.5, h = 5.2)
+print(p_dist)
+```
+
+### Additional QC: Control-Variable Availability
+
+A compact view of **how many participants are actually usable for each preregistered participant-level control** after conservative matching. The bars are based on unique `life_id` records; no unavailable diabetes or stroke-volume values are imputed.
+
+```{r control-coverage-plot, fig.height=4.2}
+ctrl_labels <- c(
+  age_num = "Age", is_female = "Sex", hr_num = "HR", rmssd_num = "RMSSD",
+  IDS_num = "IDS-SR", diab_bin = "Diabetes (ADA_DS)", bmi_num = "BMI",
+  sbp_num = "Systolic BP", dbp_num = "Diastolic BP", sv_num = "Biplane SV"
+)
+ctrl_available <- vapply(names(ctrl_labels), function(v) sum(!is.na(df[[v]])), integer(1))
+coverage_df <- data.frame(
+  Control = unname(ctrl_labels), Available_N = as.integer(ctrl_available),
+  Missing_N = N - as.integer(ctrl_available),
+  Availability_Pct = 100 * as.integer(ctrl_available) / N,
+  stringsAsFactors = FALSE
+)
+save_tab(coverage_df, "04b_control_variable_availability.csv")
+
+p_cov <- ggplot(coverage_df, aes(x = reorder(Control, Availability_Pct), y = Availability_Pct)) +
+  geom_col(fill = "#4E79A7", width = 0.73) +
+  geom_text(aes(label = sprintf("%d / %d", Available_N, N)), hjust = -0.08, size = 3) +
+  coord_flip(ylim = c(0, 110)) +
+  labs(title = "Availability of Preregistered Participant-Level Controls",
+       subtitle = sprintf("Post-exclusion N = %d; alpha power is not yet included", N),
+       x = NULL, y = "Available participants (%)") +
+  theme_minimal(base_size = 9.5) +
+  theme(panel.grid.minor = element_blank(), panel.grid.major.y = element_blank())
+save_fig(p_cov, "fig06_control_variable_availability.png", w = 6.5, h = 4.2)
+print(p_cov)
+```
+
+```{r biplane-sv-group-figure, fig.height=3.8}
+sv_plot_df <- df[!is.na(df$sv_num) & !is.na(df$anx_stratum), , drop = FALSE]
+if (nrow(sv_plot_df) > 1) {
+  sv_group_n <- table(sv_plot_df$anx_stratum)
+  p_sv <- ggplot(sv_plot_df, aes(x = anx_stratum, y = sv_num, fill = anx_stratum)) +
+    geom_boxplot(width = 0.55, outlier.alpha = 0.22, linewidth = 0.5) +
+    scale_fill_manual(values = c("Low (0-4)" = "#4E79A7", "Mild/Middle (5-9)" = "#A0CBE8", "High (10-21)" = "#E15759")) +
+    scale_x_discrete(labels = function(labs) paste0(labs, "\n(n=", as.integer(sv_group_n[labs]), ")")) +
+    labs(title = "Biplane Stroke Volume Across GAD-7 Strata",
+         subtitle = "Echo LVEDV_MOD_BP - LVESV_MOD_BP; available measurements only",
+         x = "GAD-7 stratum", y = "Stroke volume (mL)") +
+    theme_minimal(base_size = 9.5) +
+    theme(legend.position = "none", panel.grid.minor = element_blank())
+  save_fig(p_sv, "fig07_biplane_sv_by_anxiety_group.png", w = 6.5, h = 3.8)
+  print(p_sv)
+}
+```
+
+---
+
+## 4. Comparison of Low vs. High Anxiety Groups (Hypothesis 1b/1d)
+
+Per Section 2.4.6.3, we test whether the **Low Anxiety (`GAD-7: 0-4`)** and **High Anxiety (`GAD-7: 10-21`)** groups differ on demographic, psychological, or physiological parameters (Wilcoxon rank-sum test + Cohen's $d$ for continuous variables; $\chi^2$ test for binary variables). Mild/Middle (`5-9`) is shown alongside for reference.
+
+```{r group-comparison-table}
+cohen_d <- function(x, y) {
+  x <- x[!is.na(x)]; y <- y[!is.na(y)]
+  if (length(x) < 2 || length(y) < 2) return(NA_real_)
+  s_pool <- sqrt(((length(x) - 1) * var(x) + (length(y) - 1) * var(y)) / (length(x) + length(y) - 2))
+  if (s_pool == 0) return(NA_real_)
+  (mean(y) - mean(x)) / s_pool
+}
+
+idx_lo  <- which(df$anx_stratum == "Low (0-4)")
+idx_mid <- which(df$anx_stratum == "Mild/Middle (5-9)")
+idx_hi  <- which(df$anx_stratum == "High (10-21)")
+
+comp_vars <- list(
+  list(col = "age_num",          label = "Age at EEG (years)",     type = "cont"),
+  list(col = "is_female",        label = "Sex: Female (%)",        type = "bin"),
+  list(col = "IDS_num",          label = "Depression (IDS-SR)",    type = "cont"),
+  list(col = "hr_num",           label = "Heart Rate (bpm)",       type = "cont"),
+  list(col = "rmssd_num",        label = "HRV RMSSD (ms)",         type = "cont"),
+  list(col = "bmi_num",          label = "BMI (kg/m2)",            type = "cont"),
+  list(col = "sbp_num",          label = "Systolic BP (mmHg)",     type = "cont"),
+  list(col = "dbp_num",          label = "Diastolic BP (mmHg)",    type = "cont"),
+  list(col = "sv_num",           label = "Biplane Stroke Volume (mL)", type = "cont"),
+  list(col = "diab_bin",         label = "Diabetes (ADA_DS): Yes (%)", type = "bin"),
+  list(col = "gap_eeg_gad7_abs", label = "|EEG - GAD-7 Gap| (days)", type = "cont")
+)
+
+comp_rows <- lapply(comp_vars, function(item) {
+  v <- df[[item$col]]
+  v_lo <- v[idx_lo]; v_mid <- v[idx_mid]; v_hi <- v[idx_hi]
+
+  if (item$type == "cont") {
+    pval <- tryCatch(wilcox.test(v_lo, v_hi)$p.value, error = function(e) NA_real_)
+    eff  <- cohen_d(v_lo, v_hi)
+    data.frame(
+      Variable = item$label,
+      Low_0_4 = sprintf("%.2f (%.2f) [n=%d]", mean(v_lo, na.rm = TRUE), sd(v_lo, na.rm = TRUE), sum(!is.na(v_lo))),
+      Mid_5_9 = sprintf("%.2f (%.2f) [n=%d]", mean(v_mid, na.rm = TRUE), sd(v_mid, na.rm = TRUE), sum(!is.na(v_mid))),
+      High_10_21 = sprintf("%.2f (%.2f) [n=%d]", mean(v_hi, na.rm = TRUE), sd(v_hi, na.rm = TRUE), sum(!is.na(v_hi))),
+      Effect_Hi_vs_Lo = ifelse(is.na(eff), "-", sprintf("d = %+.2f", eff)),
+      p_value = ifelse(is.na(pval), "-", ifelse(pval < 0.001, "< 0.001", sprintf("%.3f", pval))),
+      stringsAsFactors = FALSE
+    )
+  } else {
+    fmt_b <- function(b) {
+      b <- b[!is.na(b)]
+      if (!length(b)) return("-")
+      sprintf("%d / %d (%.1f%%)", sum(b == 1), length(b), 100 * mean(b == 1))
+    }
+    tab2 <- table(Group = c(rep("Lo", length(v_lo)), rep("Hi", length(v_hi))),
+                  Val = c(v_lo, v_hi))
+    pval <- if (all(dim(tab2) == c(2, 2))) tryCatch(chisq.test(tab2)$p.value, error = function(e) NA_real_) else NA_real_
+    diff_pct <- 100 * (mean(v_hi == 1, na.rm = TRUE) - mean(v_lo == 1, na.rm = TRUE))
+    data.frame(
+      Variable = item$label,
+      Low_0_4 = fmt_b(v_lo),
+      Mid_5_9 = fmt_b(v_mid),
+      High_10_21 = fmt_b(v_hi),
+      Effect_Hi_vs_Lo = ifelse(is.finite(diff_pct), sprintf("%+.1f pp", diff_pct), "-"),
+      p_value = ifelse(is.na(pval), "-", ifelse(pval < 0.001, "< 0.001", sprintf("%.3f", pval))),
+      stringsAsFactors = FALSE
+    )
+  }
+})
+
+comp_df <- do.call(rbind, comp_rows)
+names(comp_df) <- c(
+  "Variable",
+  sprintf("Low GAD-7 (0-4) [N=%d]", length(idx_lo)),
+  sprintf("Middle (5-9) [N=%d]", length(idx_mid)),
+  sprintf("High GAD-7 (10-21) [N=%d]", length(idx_hi)),
+  "Diff (High - Low)",
+  "p (High vs Low)"
+)
+save_tab(comp_df, "05_anxiety_group_comparison_table.csv")
+make_tab(comp_df, caption = "Table 5. Demographic, psychological, and physiological comparison across GAD-7 groups (Wilcoxon / Chi-square tests for High vs. Low).")
+```
+
+---
+
+## 5. Correlations with GAD-7, Covariate Matrix & PCA Structure
+
+In Section 2.4.5.3 (Mediation), control variables significantly correlated with GAD-7 are candidate mediators if adding PCA-orthogonalized controls attenuates a primary HEP-anxiety effect. Below we report both **Pearson ($r$)** and **Spearman ($\rho$)** correlations with continuous GAD-7 scores, followed by the full pairwise Spearman correlation heatmap and a preview of the PCA variance structure across the participant-level controls.
+
+```{r gad7-correlations}
+cor_targets <- list(
+  "Depression (IDS-SR)"      = df$IDS_num,
+  "Sex (1 = Female)"         = df$is_female,
+  "Age at EEG (years)"       = df$age_num,
+  "Heart Rate (bpm)"         = df$hr_num,
+  "HRV RMSSD (ms)"           = df$rmssd_num,
+  "BMI (kg/m2)"              = df$bmi_num,
+  "Systolic BP (mmHg)"       = df$sbp_num,
+  "Diastolic BP (mmHg)"      = df$dbp_num,
+  "Biplane Stroke Volume (mL)" = df$sv_num,
+  "Diabetes ADA_DS (1=Yes)"  = df$diab_bin,
+  "|EEG - GAD-7 Gap| (days)" = df$gap_eeg_gad7_abs
+)
+
+gad_cor_rows <- lapply(names(cor_targets), function(nm) {
+  y <- cor_targets[[nm]]
+  ok <- !is.na(df$GAD7_num) & !is.na(y)
+  n_pair <- sum(ok)
+  # Keep a visible "not estimable" row instead of failing on all-missing or
+  # constant binary diabetes status in a sparse matched subsample.
+  if (n_pair < 10 || length(unique(df$GAD7_num[ok])) < 2L ||
+      length(unique(y[ok])) < 2L) {
+    return(data.frame(
+      Control_Variable = nm, Pairwise_N = n_pair,
+      Pearson_r = "-", Pearson_p = "-", Spearman_rho = "-",
+      Spearman_p = "-", Sig_p05 = "Not estimable",
+      stringsAsFactors = FALSE
+    ))
+  }
+  rp <- cor.test(df$GAD7_num[ok], y[ok], method = "pearson")
+  rs <- suppressWarnings(cor.test(df$GAD7_num[ok], y[ok], method = "spearman"))
+  data.frame(
+    Control_Variable = nm,
+    Pairwise_N = n_pair,
+    Pearson_r = sprintf("%+.3f", rp$estimate),
+    Pearson_p = ifelse(rp$p.value < 0.001, "< 0.001", sprintf("%.3f", rp$p.value)),
+    Spearman_rho = sprintf("%+.3f", rs$estimate),
+    Spearman_p = ifelse(rs$p.value < 0.001, "< 0.001", sprintf("%.3f", rs$p.value)),
+    Sig_p05 = ifelse(rp$p.value < 0.05 | rs$p.value < 0.05, "Yes", "No"),
+    stringsAsFactors = FALSE
+  )
+})
+gad_cor_df <- do.call(rbind, gad_cor_rows)
+save_tab(gad_cor_df, "06_correlations_with_GAD7.csv")
+make_tab(gad_cor_df, caption = "Table 6. Bivariate associations between continuous GAD-7 anxiety scores and preregistered control variables.")
+```
+
+```{r correlation-heatmap, fig.height=4.8}
+mat_df <- data.frame(
+  `GAD-7`     = df$GAD7_num,
+  `IDS-SR`    = df$IDS_num,
+  `Age`       = df$age_num,
+  `Female`    = df$is_female,
+  `HR`        = df$hr_num,
+  `RMSSD`     = df$rmssd_num,
+  `BMI`       = df$bmi_num,
+  `SBP`       = df$sbp_num,
+  `DBP`       = df$dbp_num,
+  `BiplaneSV` = df$sv_num,
+  `Diabetes`  = df$diab_bin,
+  `GapDays`   = df$gap_eeg_gad7_abs,
+  check.names = FALSE
+)
+
+cmat <- cor(mat_df, use = "pairwise.complete.obs", method = "spearman")
+save_tab(cbind(Variable = rownames(cmat), as.data.frame(round(cmat, 3))), "07_spearman_correlation_matrix.csv")
+
+vars_ord <- colnames(cmat)
+grid_cor <- expand.grid(Var1 = vars_ord, Var2 = rev(vars_ord), stringsAsFactors = FALSE)
+grid_cor$rho <- as.vector(cmat[cbind(grid_cor$Var1, grid_cor$Var2)])
+grid_cor$Var1 <- factor(grid_cor$Var1, levels = vars_ord)
+grid_cor$Var2 <- factor(grid_cor$Var2, levels = rev(vars_ord))
+
+p_cor <- ggplot(grid_cor, aes(x = Var1, y = Var2, fill = rho)) +
+  geom_tile(color = "white", linewidth = 0.4) +
+  geom_text(aes(label = sprintf("%.2f", rho)), size = 2.5) +
+  scale_fill_gradient2(low = "#2166AC", mid = "white", high = "#B2182B", midpoint = 0, limits = c(-1, 1)) +
+  labs(
+    title = "Pairwise Spearman Correlation Matrix of Anxiety & Control Variables",
+    subtitle = "Pairwise complete observations in post-exclusion sample",
+    x = NULL, y = NULL, fill = "Spearman\nrho"
+  ) +
+  theme_minimal(base_size = 9.5) +
+  theme(axis.text.x = element_text(angle = 40, hjust = 1), panel.grid = element_blank())
+
+save_fig(p_cor, "fig03_covariate_correlation_heatmap.png", w = 6.5, h = 4.8)
+print(p_cor)
+```
+
+```{r pca-preview}
+pca_input <- df[, ctrl_vars_10]
+pca_cc <- pca_input[complete.cases(pca_input), ]
+if (nrow(pca_cc) > 30) {
+  keep_v <- vapply(pca_cc, function(z) sd(z) > 0, logical(1))
+  pca_fit <- prcomp(pca_cc[, keep_v], center = TRUE, scale. = TRUE)
+  var_exp <- (pca_fit$sdev^2) / sum(pca_fit$sdev^2)
+  pca_df <- data.frame(
+    Component = paste0("PC", seq_along(var_exp)),
+    Eigenvalue = round(pca_fit$sdev^2, 3),
+    Variance_Pct = sprintf("%.2f%%", 100 * var_exp),
+    Cumulative_Pct = sprintf("%.2f%%", 100 * cumsum(var_exp)),
+    Exceeds_1Pct_Cutoff = ifelse(var_exp > 0.01, "Yes", "No"),
+    stringsAsFactors = FALSE
+  )
+  save_tab(pca_df, "08_pca_controls_variance_preview.csv")
+  make_tab(pca_df, caption = sprintf("Table 7. Collinearity & PCA preview across %d participant-level controls (complete N = %d; pipeline-specific alpha power added later; height excluded).", sum(keep_v), nrow(pca_cc)))
+}
+```
+
+---
+
+## 6. Assessment Dates, Temporal Gaps & the <30-Day Sensitivity Subsample
+
+Because LIFE assessments occurred across separate visits (Section 2.4.6.1), we inspect calendar coverage for all recorded dates, the temporal separation between **Resting EEG (`date_eeg`)** and **GAD-7 (`date_gad7`)**, and sample sizes for the preregistered **< 30-day sensitivity subsample**.
+
+```{r date-coverage-table}
+date_labels <- c(
+  date_eeg = "Resting-State EEG (date_eeg)",
+  date_gad7 = "GAD-7 Questionnaire (date_gad7)",
+  date_ids = "IDS-SR Depression (date_ids)",
+  date_bp = "Blood Pressure Exam (date_bp)",
+  date_bmi = "BMI Anthropometry (date_bmi)",
+  date_ecg = "12-Lead Clinical ECG (date_ecg)",
+  date_echo = "Echo Assessment (date_echo)",
+  date_echo_2 = "Additional Echo Date (date_echo_2)",
+  date_medications = "Medication Interview (date_medications)"
+)
+
+dt_rows <- lapply(names(date_labels), function(dc) {
+  col_dt <- paste0(dc, "_dt")
+  if (!col_dt %in% names(df)) return(NULL)
+  d <- df[[col_dt]]
+  d_ok <- d[!is.na(d)]
+  if (!length(d_ok)) return(NULL)
+  gap_d <- abs(as.numeric(df$date_eeg_dt - d))
+  gap_ok <- gap_d[!is.na(gap_d)]
+  data.frame(
+    Assessment = date_labels[[dc]],
+    Valid_Dates = sprintf("%d (%.1f%%)", length(d_ok), 100 * length(d_ok) / N),
+    Earliest = as.character(min(d_ok)),
+    Median_Date = as.character(median(d_ok)),
+    Latest = as.character(max(d_ok)),
+    Abs_Gap_to_EEG_Days_Med_IQR = if (dc == "date_eeg" || !length(gap_ok)) "-" else
+      sprintf("%.0f (%.0f - %.0f)", median(gap_ok), quantile(gap_ok, 0.25), quantile(gap_ok, 0.75)),
+    Within_30d_of_EEG = if (dc == "date_eeg" || !length(gap_ok)) "-" else
+      sprintf("%d (%.1f%%)", sum(gap_ok < 30), 100 * mean(gap_ok < 30)),
+    stringsAsFactors = FALSE
+  )
+})
+dt_df <- do.call(rbind, dt_rows)
+save_tab(dt_df, "09_assessment_dates_and_gaps_to_eeg.csv")
+make_tab(dt_df, caption = "Table 8. Calendar range of key assessments and absolute temporal distance to the EEG recording.")
+```
+
+### Detailed Breakdown of the EEG - GAD-7 Temporal Gap
+
+```{r gap-buckets-table}
+g_signed <- df$gap_eeg_gad7_signed
+g_abs    <- df$gap_eeg_gad7_abs
+has_gap  <- !is.na(g_abs)
+
+buckets <- cut(
+  g_abs,
+  breaks = c(-Inf, 0, 7, 14, 29.999, 60, 90, 180, 365, Inf),
+  labels = c(
+    "Same day (0 days)",
+    "1 - 7 days",
+    "8 - 14 days",
+    "15 - 29 days",
+    "30 - 60 days",
+    "61 - 90 days",
+    "91 - 180 days",
+    "181 - 365 days",
+    "> 365 days"
+  )
+)
+
+b_tab <- lapply(levels(buckets), function(lvl) {
+  ix <- which(buckets == lvl)
+  data.frame(
+    Gap_Window = lvl,
+    Total_N = sprintf("%d (%.1f%%)", length(ix), 100 * length(ix) / sum(has_gap)),
+    Low_GAD7_0_4 = sum(df$anx_stratum[ix] == "Low (0-4)", na.rm = TRUE),
+    Mid_GAD7_5_9 = sum(df$anx_stratum[ix] == "Mild/Middle (5-9)", na.rm = TRUE),
+    High_GAD7_10_21 = sum(df$anx_stratum[ix] == "High (10-21)", na.rm = TRUE),
+    stringsAsFactors = FALSE
+  )
+})
+b_df <- do.call(rbind, b_tab)
+
+ix_u30 <- which(df$under_30d)
+u30_row <- data.frame(
+  Gap_Window = "PREREGISTERED SUBSAMPLE: < 30 days (0 - 29 d)",
+  Total_N = sprintf("%d (%.1f%%)", length(ix_u30), 100 * length(ix_u30) / sum(has_gap)),
+  Low_GAD7_0_4 = sum(df$anx_stratum[ix_u30] == "Low (0-4)", na.rm = TRUE),
+  Mid_GAD7_5_9 = sum(df$anx_stratum[ix_u30] == "Mild/Middle (5-9)", na.rm = TRUE),
+  High_GAD7_10_21 = sum(df$anx_stratum[ix_u30] == "High (10-21)", na.rm = TRUE),
+  stringsAsFactors = FALSE
+)
+b_df <- rbind(b_df, u30_row)
+
+save_tab(b_df, "10_eeg_gad7_gap_windows_by_anxiety.csv")
+make_tab(b_df, caption = "Table 9. Participant counts by |EEG - GAD-7| recording gap and anxiety group (H1b/d sensitivity rerun requires High GAD-7 N >= 25 in <30d subsample).")
+```
+
+*Order of assessments:* Among `r sum(has_gap)` participants with both dates available, EEG occurred **after** GAD-7 (`date_eeg > date_gad7`) in **`r sum(g_signed > 0, na.rm = TRUE)` (`r sprintf("%.1f%%", 100 * mean(g_signed > 0, na.rm = TRUE))`)**, on the **same day** in **`r sum(g_signed == 0, na.rm = TRUE)` (`r sprintf("%.1f%%", 100 * mean(g_signed == 0, na.rm = TRUE))`)**, and **before** GAD-7 (`date_eeg < date_gad7`) in **`r sum(g_signed < 0, na.rm = TRUE)` (`r sprintf("%.1f%%", 100 * mean(g_signed < 0, na.rm = TRUE))`)** participants (signed median = `r sprintf("%+.0f", median(g_signed, na.rm = TRUE))` days; signed mean = `r sprintf("%+.1f", mean(g_signed, na.rm = TRUE))` days, SD = `r sprintf("%.1f", sd(g_signed, na.rm = TRUE))` days).
+
+```{r dates-and-gap-plots, fig.height=4.2}
+cal_df <- rbind(
+  data.frame(Modality = "Resting EEG", Date = df$date_eeg_dt[!is.na(df$date_eeg_dt)]),
+  data.frame(Modality = "GAD-7 Questionnaire", Date = df$date_gad7_dt[!is.na(df$date_gad7_dt)])
+)
+
+p_cal <- ggplot(cal_df, aes(x = Date, fill = Modality)) +
+  geom_histogram(bins = 45, alpha = 0.75, position = "identity", color = "white", linewidth = 0.15) +
+  facet_wrap(~ Modality, ncol = 1, scales = "free_y") +
+  scale_fill_manual(values = c("Resting EEG" = "#3B6998", "GAD-7 Questionnaire" = "#E15759")) +
+  labs(
+    title = "Calendar Distribution of Resting EEG and GAD-7 Assessments",
+    x = "Assessment Date", y = "Participants"
+  ) +
+  theme_minimal(base_size = 9.5) +
+  theme(legend.position = "none", panel.grid.minor = element_blank(), strip.text = element_text(face = "bold"))
+
+save_fig(p_cal, "fig04_eeg_and_gad7_calendar_dates.png", w = 6.5, h = 4.2)
+print(p_cal)
+```
+
+```{r gap-distribution-plot, fig.height=3.8}
+gap_zoom <- df[!is.na(df$gap_eeg_gad7_signed) & df$gap_eeg_gad7_signed >= -90 & df$gap_eeg_gad7_signed <= 180, ]
+n_outside <- sum(!is.na(df$gap_eeg_gad7_signed)) - nrow(gap_zoom)
+
+p_gap <- ggplot(gap_zoom, aes(x = gap_eeg_gad7_signed, fill = under_30d)) +
+  geom_histogram(binwidth = 5, color = "white", linewidth = 0.2) +
+  geom_vline(xintercept = c(-30, 30), linetype = "dashed", color = "#B2182B", linewidth = 0.6) +
+  scale_fill_manual(
+    values = c("TRUE" = "#2B8CBE", "FALSE" = "#BDBDBD"),
+    labels = c("TRUE" = "< 30 days (Sensitivity Subsample)", "FALSE" = ">= 30 days")
+  ) +
+  labs(
+    title = "Signed Temporal Gap: EEG Date minus GAD-7 Date (Days)",
+    subtitle = sprintf("Showing -90 to +180 days (%d extreme values outside window omitted from plot; dashed = +/- 30d)", n_outside),
+    x = "date_eeg - date_gad7 (days; positive = EEG recorded after GAD-7)",
+    y = "Number of Participants", fill = NULL
+  ) +
+  theme_minimal(base_size = 9.5) +
+  theme(legend.position = "top", panel.grid.minor = element_blank())
+
+save_fig(p_gap, "fig05_eeg_gad7_gap_distribution.png", w = 6.5, h = 3.8)
+print(p_gap)
+```
