@@ -8,6 +8,17 @@ run('config.m');
 files = dir(datadir);
 files = files([files.isdir] & ~startsWith({files.name}, '.')); % subject folders only
 
+% restrict to the analysis sample (participants remaining after the exclusion criteria)
+sample = readtable(sample_file, 'Delimiter', ',', 'TextType', 'string');
+sample_ids = unique(strtrim(sample.life_id));
+% folder (= raw file) names are LIFE IDs, but two recordings lack the "LI" prefix
+folder_ids = string({files.name});
+no_prefix = ~startsWith(folder_ids, "LI");
+folder_ids(no_prefix) = "LI" + folder_ids(no_prefix);
+keep = ismember(folder_ids, sample_ids);
+files = files(keep);
+life_ids = folder_ids(keep);  
+
 %% documentation
 prep_subjects = {};
 
@@ -17,7 +28,8 @@ for hp = 1:length(hp_settings)
 
         try
             % get subjid
-            subjid = files(i).name;
+            subjid = files(i).name;          
+            life_id = char(life_ids(i));     
             subj_folder = fullfile(files(i).folder, '/', files(i).name, '/');
             eegpath = fullfile(files(i).folder, '/', files(i).name, '/eeg');
             ecgpath = fullfile(files(i).folder, '/', files(i).name, '/ecg');
@@ -69,6 +81,18 @@ for hp = 1:length(hp_settings)
 %           EEG = pop_eegfilt(EEG, hp_settings(hp), 0, hp_filter_order(hp), 0, 0, 0, 'fir1', 0);
 %           ECG = pop_eegfilt(ECG, hp_settings(hp), 0, hp_filter_order(hp), 0, 0, 0, 'fir1', 0);
 
+            % crop to the resting-state block S99 -> S100 (S99 + rest_duration_min if S100 is missing
+            % without any start marker the whole recording is kept
+            [rest_t0, rest_t1, rest_src] = get_rest_start(EEG, life_id, christian_s99_dirs, rest_duration_min);
+            if ~isnan(rest_t0)
+                rest_win = [max(rest_t0, 0), min(rest_t1, EEG.pnts / EEG.srate) - 1 / EEG.srate];
+                EEG = pop_select(EEG, 'time', rest_win);
+                ECG = pop_select(ECG, 'time', rest_win);
+                ECG_heplab = pop_select(ECG_heplab, 'time', rest_win);
+            end
+            EEG.etc.rest_block = struct('start_s', rest_t0, 'end_s', rest_t1, 'source', rest_src, 'kept_min', EEG.pnts / EEG.srate / 60);
+            ECG.etc.rest_block = EEG.etc.rest_block;
+
             % ASR for removal of channels (less than correlation of 0.85 or 5 seconds flat)
             EEG = clean_artifacts(EEG, 'ChannelCriterion', chan_crit, 'FlatlineCriterion', flat_line, 'LineNoiseCriterion', 'off', 'BurstCriterion', 'off', 'WindowCriterion', 'off', 'Highpass', 'off');
 
@@ -91,17 +115,17 @@ for hp = 1:length(hp_settings)
             %average reference
             EEG = pop_reref( EEG, []);
         
-            % detect R-peaks from ECG dataset
+            % R-peaks (2.3.2): HEPLAB, then aligned to the QRS template, R-peaks in unreliable ECG stretches
+            % dropped, extrasystoles marked
             HEP_qrs = heplab_slowdetect(ECG_heplab.data, ECG_heplab.srate);
+            [n_ext_cers, hr_cers] = get_cers_extrasystoles(cers_file, life_id);
+            [HEP_qrs, is_ext, rpeak_info] = process_rpeaks(ECG_heplab.data, HEP_qrs, ECG_heplab.srate, epoch_length, n_ext_cers, hr_cers, rpeak_params);
+            parsave([ecgpath, '/', 'extrasystoles.mat'], rpeak_info);
 
-            % %ECG dataset processed in parallel to the EEG
-            % ecgIdx = find(contains({ECG.chanlocs.labels}, 'ECG'));
-            % ECG = pop_select(ECG, 'channel', ecgIdx);
-
-            % Exclude both heartbeats of any pair with an inter-beat interval < min_ibi
-            IBI = diff(HEP_qrs(:));
+            % Exclude both heartbeats of any pair with an inter-beat interval < min_ibi, and extrasystolic beats
+            IBI = diff(HEP_qrs);
             short_ibi = IBI < min_ibi * fs;
-            drop_beats = [short_ibi; false] | [false; short_ibi];
+            drop_beats = [short_ibi; false] | [false; short_ibi] | is_ext;
             HEP_qrs = HEP_qrs(~drop_beats);
 
              % save events to EEG and ECG set

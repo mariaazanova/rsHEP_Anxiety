@@ -34,8 +34,29 @@ pop_editoptions('option_computeica', 1);
 %HEP event marker
 hep_event_marker = '88';
 
+%analysis sample: participants remaining after the exclusion criteria (column life_id)
+sample_file = [deriv_root, 'data_after_exclusion.csv'];
+
+%resting-state block: marker S99 to S100
+%without S100 the block is S99 + rest_duration_min (20 min); recordings without either marker use Christian's
+%S99 marker files, and without any start marker the whole recording is kept
+rest_duration_min = 20;
+christian_s99_dirs = {'/data/p_02865/data/LIFE/raw/Marker_Files_Christian//Start_Marker_S99', ...
+                      '/data/p_02865/data/LIFE/raw/Marker_Files_Christian/eeg_marker_files/Charge 2/Start-Marker S99', ...
+                      '/data/p_02865/Marker_Files_Christian/missing_marker_files/S 99 Markers'};
+
 %minimum IBI (sec)
 min_ibi = 0.6;
+
+% R-peak processing after HEPLAB 
+rpeak_params = struct( ...
+    'align_shift_ms', 60, 'align_min_corr', 0.9, ...                  % align markers to the QRS template
+    'win_s', 10, 'min_bsqi', 0.9, 'bsqi_tol_s', 0.1, ...               % agreement between HEPLAB and indepentent peak detector
+    'min_beats', 3, 'flat_rel', 0.05, 'clip_frac', 0.01, ...           % noisy ECG - lost / flat / clipped
+    'max_hr_dev_cers', 0.10, ...                                       % CER-S trusted within this heart-rate deviation
+    'ratio_thr', 0.76, 'corr_thr', 0.84, 'ext_shift_ms', 40, 'gap_thr', 1.6, ...   % extrasystole rule, validated
+    'accept_thr', 0.8, 'ref_win', 10, 'max_rejected', 10);       
+cers_file = '/data/p_02865/data/LIFE/tabular/AMPS_CER-S/ECGAna_allSubj.csv';
 
 % Length of HEPs in seconds
 epoch_length = [-0.2, 0.6]; 
@@ -95,6 +116,10 @@ p2p_step_ms = 100;
 
 %exclude participant from a pipeline if fewer epochs remain after rejection 
 min_epochs = 300;
+
+% standard life channel order -> a5 reorders every subject to it to prevent misalignment
+ref_labels = {'Fp1','Fp2','F3','F4','F7','F8','Fz','FC1','FC2','FC5','FC6','C3','C4','T7','T8','Cz','FT9','FT10', ...
+              'CP5','CP6','TP9','TP10','P3','P4','P7','P8','Pz','O1','O2','PO9','PO10'};
 
 %Ignore channels in bad epoch detection due to influence of eye activity
 ignore_channel = {'Fp1', 'Fp2', 'F7', 'F8'};

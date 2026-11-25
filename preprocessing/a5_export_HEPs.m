@@ -94,11 +94,15 @@ for ic = 1:length(ic_cutoffs)
                     meanECG = mean(ECG.data, 3);
 
                     % Store data from all subjects
+                    % a few recordings store the same channels in a different order (FT9/FT10 last):
+                    % bring every subject to the reference order before stacking across subjects
+                    [~, chan_order] = ismember(ref_labels, {EEG.chanlocs.labels});
+                    meanHEP = meanHEP(chan_order, :);
                     HEP_all_local{i} = meanHEP;
                     ECG_all_local{i} = meanECG;
 
                     %% get average across space and time hep
-                    [~, chan_roi] = ismember(electrodes, {EEG.chanlocs.labels});
+                    [~, chan_roi] = ismember(electrodes, ref_labels);
                     time_roi = EEG.times >= time_range(1) & EEG.times <= time_range(2);
 
                     % Store average HEP (now using NaN as invalid marker)
@@ -114,7 +118,7 @@ for ic = 1:length(ic_cutoffs)
 
                     % subject wise average HEP/ECG for this condition
                     subj_HEP = struct('meanHEP', meanHEP, 'meanECG', meanECG, 'times', EEG.times, ...
-                        'chanlabels', {{EEG.chanlocs.labels}}, 'roi_HEP', roi_HEP, 'roi_ECG', roi_ECG, ...
+                        'chanlabels', {ref_labels}, 'roi_HEP', roi_HEP, 'roi_ECG', roi_ECG, ...
                         'n_epochs_total', n_epochs_pre, 'n_epochs_rejected', length(bad_epoch_indices), ...
                         'n_epochs_kept', size(EEG.data, 3));
                     parsave([HEP_path, subjid, '_', cond_id, '_avgHEP.mat'], subj_HEP);
