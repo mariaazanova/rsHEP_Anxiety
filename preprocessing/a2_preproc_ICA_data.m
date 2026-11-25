@@ -73,6 +73,12 @@ for hp = 1:length(hp_settings)
             EEG_ICA = pop_eegfiltnew(EEG_ICA, 'locutoff',ica_hp_cutoff,'hicutoff',0, 'filtorder', ica_hp_filter_order,'plotfreqz',0);
             ECG = pop_eegfiltnew(ECG, 'locutoff',ica_hp_cutoff,'hicutoff',0, 'filtorder', ica_hp_filter_order,'plotfreqz',0);
 
+            %% Crop to the resting block exactly as in a1 (the R-peak samples below refer to the cropped data)
+            if ~isempty(EEG.etc.rest_block.win)
+                EEG_ICA = pop_select(EEG_ICA, 'time', EEG.etc.rest_block.win);
+                ECG = pop_select(ECG, 'time', EEG.etc.rest_block.win);
+            end
+
             %% Interpolate
             EEG_ICA = pop_interp(EEG_ICA, chanlocs, 'spherical');
             eeg_checkset(EEG_ICA);

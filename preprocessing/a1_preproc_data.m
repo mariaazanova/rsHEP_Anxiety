@@ -84,13 +84,15 @@ for hp = 1:length(hp_settings)
             % crop to the resting-state block S99 -> S100 (S99 + rest_duration_min if S100 is missing
             % without any start marker the whole recording is kept
             [rest_t0, rest_t1, rest_src] = get_rest_start(EEG, life_id, christian_s99_dirs, rest_duration_min);
+            rest_win = [];
             if ~isnan(rest_t0)
                 rest_win = [max(rest_t0, 0), min(rest_t1, EEG.pnts / EEG.srate) - 1 / EEG.srate];
                 EEG = pop_select(EEG, 'time', rest_win);
                 ECG = pop_select(ECG, 'time', rest_win);
                 ECG_heplab = pop_select(ECG_heplab, 'time', rest_win);
             end
-            EEG.etc.rest_block = struct('start_s', rest_t0, 'end_s', rest_t1, 'source', rest_src, 'kept_min', EEG.pnts / EEG.srate / 60);
+            EEG.etc.rest_block = struct('start_s', rest_t0, 'end_s', rest_t1, 'source', rest_src, 'kept_min', EEG.pnts / EEG.srate / 60, ...
+                                        'win', rest_win);   % [start end] s actually cut; a2 and a9 cut the same window
             ECG.etc.rest_block = EEG.etc.rest_block;
 
             % ASR for removal of channels (less than correlation of 0.85 or 5 seconds flat)
