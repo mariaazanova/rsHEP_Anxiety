@@ -99,6 +99,7 @@ for ic = 1:length(ic_cutoffs)
 
                 % Save cleaned dataset - removed baseline from filename
                 % Saving failed sometimes -> loading ica options in config seems to fix it
+                prep_id_ica = sprintf('%s_hp_%0.1f_ic_%0.1f.set', subjid, hp_settings(hp), ic_cutoffs(ic));
                 EEGclean = pop_saveset(EEGclean, 'filename', prep_id_ica, 'filepath', clean_path);
 
                 % %% Some QA Plots
