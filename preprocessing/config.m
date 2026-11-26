@@ -89,6 +89,12 @@ baseline = {[-150, -50], []};
 %1.5, 3.5, or no cardiac ICs removed
 ic_cutoffs = [1.5, 3.5, 0, NaN];
 
+% alpha power Welch PSD, 4-s Hanning windows, 50% overlap, mean over 8-12 Hz
+alpha_band = [8, 12];       % Hz
+welch_window_s = 4;         % s
+welch_overlap = 0.5;
+alpha_hp = 2;               % index into hp_settings (0.5 Hz) -> alpha power is computed for one hp-setting only but all ICA levels.
+
 %clean artifacts settings
 
 %correlation with neighbours

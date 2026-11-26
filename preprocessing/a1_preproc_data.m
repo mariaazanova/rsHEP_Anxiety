@@ -132,6 +132,8 @@ for hp = 1:length(hp_settings)
 
              % save events to EEG and ECG set
             EEG = fun_heplab_save_events(EEG, HEP_qrs, hep_event_marker);
+            rs = num2cell(HEP_qrs);
+            [EEG.event(end - numel(rs) + 1:end).rpeak_sample] = rs{:};   % R-peak sample in the resting block -> needed for split-half reliability (a10)
             ECG = fun_heplab_save_events(ECG, HEP_qrs, hep_event_marker);
             eeg_checkset(EEG);
             eeg_checkset(ECG);
