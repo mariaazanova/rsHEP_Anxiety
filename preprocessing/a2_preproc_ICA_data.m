@@ -37,7 +37,7 @@ for hp = 1:length(hp_settings)
 
             %% load RAW data - will be filtered at 1 Hz and used for ICA
             % ECG is loaded raw again as the one from a1_preproc_data.m is already high-pass filtered and epoched
-            [EEG_ICA, ECG] = load_life_raw(subjid, raw_dirs, ecg_label, eog_labels, orig_chanlocs);
+            [EEG_ICA, ECG] = load_life_raw(subjid, edf_dir, ecg_label, eog_labels, orig_chanlocs);
 
             %% load preprocessed dataset from subject
             EEG = pop_loadset('filename', prep_id,'filepath', prep_eegpath);
@@ -72,12 +72,6 @@ for hp = 1:length(hp_settings)
             %% High pass filter
             EEG_ICA = pop_eegfiltnew(EEG_ICA, 'locutoff',ica_hp_cutoff,'hicutoff',0, 'filtorder', ica_hp_filter_order,'plotfreqz',0);
             ECG = pop_eegfiltnew(ECG, 'locutoff',ica_hp_cutoff,'hicutoff',0, 'filtorder', ica_hp_filter_order,'plotfreqz',0);
-
-            %% Crop to the resting block exactly as in a1 (the R-peak samples below refer to the cropped data)
-            if ~isempty(EEG.etc.rest_block.win)
-                EEG_ICA = pop_select(EEG_ICA, 'time', EEG.etc.rest_block.win);
-                ECG = pop_select(ECG, 'time', EEG.etc.rest_block.win);
-            end
 
             %% Interpolate
             EEG_ICA = pop_interp(EEG_ICA, chanlocs, 'spherical');

@@ -34,12 +34,12 @@ for ic = 1:length(ic_cutoffs)
                     keep = true(EEG.trials, 1); keep(bad) = false;
                     if sum(keep) < min_epochs, continue, end   % excluded in a5 as well
 
-                    % half of the resting block in which each epoch's R-peak lies
+                    % half of the recording in which each epoch's R-peak lies
                     onset = nan(EEG.trials, 1);
                     for e = 1:EEG.trials
                         onset(e) = [EEG.event(EEG.epoch(e).event).rpeak_sample];   % only the R-peak event has this field
                     end
-                    first = onset <= P.etc.rest_block.kept_min * 60 * EEG.srate / 2;
+                    first = onset <= P.etc.n_samples / 2;
 
                     [~, chan_roi] = ismember(electrodes, {EEG.chanlocs.labels});
                     roi = squeeze(mean(mean(EEG.data(chan_roi, EEG.times >= time_range(1) & EEG.times <= time_range(2), :), 1), 2));

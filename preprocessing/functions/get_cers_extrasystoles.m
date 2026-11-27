@@ -1,7 +1,7 @@
 function [n_ext, hr] = get_cers_extrasystoles(cers_file, subjid)
 % GET_CERS_EXTRASYSTOLES  V + S beat count and heart rate (beats/min) of one participant in the CER-S
-%   summary table; both NaN without a row or CER-S result. Uses the ECG_<ID>_Ruhe_2 row if present, else
-%   ECG_<ID>_Ruhe (as load_life_raw). '-' means none. hr = # QRS / analyzed time.
+%   summary table (row ECG_<subjid>_Ruhe); both NaN without a row or CER-S result. '-' means none.
+%   hr = # QRS / analyzed time.
 lines = splitlines(fileread(cers_file));
 hdr = strtrim(strsplit(lines{1}, ';'));
 names = cellfun(@(l) strtrim(strtok(l, ';')), lines, 'UniformOutput', false);

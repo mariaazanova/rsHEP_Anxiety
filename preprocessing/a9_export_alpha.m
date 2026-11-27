@@ -3,7 +3,7 @@
 % four times: no ICA cleaning, no CFA ICs removed, 1-2 CFA ICs removed, 3-4 CFA ICs removed.
 %
 % a1-a4 only save epoched data (-200 to 600 ms), which cannot give 4 s windows. This script therefore rebuilds
-% the continuous preprocessed recording exactly as a1 does (low-pass, notch, resample, high-pass, resting-block crop, removal and
+% the continuous preprocessed recording exactly as a1 does (low-pass, notch, resample, high-pass, removal and
 % interpolation of the channels a1 removed, average reference) and applies the ICA weights and the component
 % selections that a2/a4 stored in the cleaned datasets.
 %
@@ -36,15 +36,12 @@ parfor i = 1:length(files)
         PREP = pop_loadset('filename', prep_id, 'filepath', prep_eegpath, 'loadmode', 'info');
 
         % continuous data, same steps as a1
-        EEG = load_life_raw(subjid, raw_dirs, ecg_label, eog_labels, orig_chanlocs);
+        EEG = load_life_raw(subjid, edf_dir, ecg_label, eog_labels, orig_chanlocs);
         EEG = pop_eegfiltnew(EEG, 'locutoff', 0, 'hicutoff', lp_settings, 'filtorder', lp_filter_order, 'plotfreqz', 0);
         EEG = pop_eegfiltnew(EEG, 'locutoff', notch_band(1), 'hicutoff', notch_band(2), 'revfilt', 1, 'filtorder', notch_filter_order, 'plotfreqz', 0);
         EEG = pop_resample(EEG, fs);
         chanlocs = EEG.chanlocs;
         EEG = pop_eegfiltnew(EEG, 'locutoff', hp_settings(alpha_hp), 'hicutoff', 0, 'filtorder', hp_filter_order(alpha_hp), 'plotfreqz', 0);
-        if ~isempty(PREP.etc.rest_block.win)        % resting block, the same window a1 cut
-            EEG = pop_select(EEG, 'time', PREP.etc.rest_block.win);
-        end
         if ~isempty(PREP.reject.removed_channels)
             EEG = pop_select(EEG, 'nochannel', PREP.reject.removed_channels);
         end

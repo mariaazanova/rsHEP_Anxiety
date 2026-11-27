@@ -117,7 +117,7 @@ for ic = 1:length(ic_cutoffs)
 
                 % %raw PSD - same for all conditions, only once per subject
                 % if ic == 1 && hp == 1
-                %     EEG_RAW = load_life_raw(subjid, raw_dirs, ecg_label, eog_labels, orig_chanlocs);
+                %     EEG_RAW = load_life_raw(subjid, edf_dir, ecg_label, eog_labels, orig_chanlocs);
                 %     figure; plot_spec(EEG_RAW.data(1:end,:)', EEG_RAW.srate, 'f_max',70);
                 %     saveas(gcf, [QA_save_path, subjid, '_PSD_raw.png'],'png');
                 % end

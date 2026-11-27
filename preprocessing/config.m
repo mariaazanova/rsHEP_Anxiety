@@ -8,9 +8,7 @@ addpath(fullfile(fileparts(mfilename('fullpath')), 'functions'))
 orig_chanlocs = '/data/p_02865/tools/eeglab2024.1/plugins/dipfit/standard_BEM/elec/standard_1005.elc';
 
 %% Data paths
-raw_dirs = {'/data/p_02865/data/LIFE/raw/EEG/ruhe/', ...
-            '/data/p_02865/data/LIFE/raw/EEG/esf_data_2014-08-21/', ...
-            '/data/p_02865/data/LIFE/raw/EEG/fehlende_Daten/'};
+edf_dir = '/data/p_02865/data/LIFE/raw/EDF Files 20min Ruhe/';  
 deriv_root = '/data/p_02865/data/LIFE/derivatives/';
 datadir = [deriv_root, 'preprocessing/'];         
 save_error = [deriv_root, 'logs/'];
@@ -37,14 +35,6 @@ hep_event_marker = '88';
 %analysis sample: participants remaining after the exclusion criteria (column life_id)
 sample_file = [deriv_root, 'data_after_exclusion.csv'];
 
-%resting-state block: marker S99 to S100
-%without S100 the block is S99 + rest_duration_min (20 min); recordings without either marker use Christian's
-%S99 marker files, and without any start marker the whole recording is kept
-rest_duration_min = 20;
-christian_s99_dirs = {'/data/p_02865/data/LIFE/raw/Marker_Files_Christian//Start_Marker_S99', ...
-                      '/data/p_02865/data/LIFE/raw/Marker_Files_Christian/eeg_marker_files/Charge 2/Start-Marker S99', ...
-                      '/data/p_02865/Marker_Files_Christian/missing_marker_files/S 99 Markers'};
-
 %minimum IBI (sec)
 min_ibi = 0.6;
 
@@ -56,7 +46,7 @@ rpeak_params = struct( ...
     'max_hr_dev_cers', 0.10, ...                                       % CER-S trusted within this heart-rate deviation
     'ratio_thr', 0.76, 'corr_thr', 0.84, 'ext_shift_ms', 40, 'gap_thr', 1.6, ...   % extrasystole rule, validated
     'accept_thr', 0.8, 'ref_win', 10, 'max_rejected', 10);       
-cers_file = '/data/p_02865/data/LIFE/tabular/AMPS_CER-S/ECGAna_allSubj.csv';
+cers_file = '/data/p_02865/data/LIFE/tabular/AMPS_CER-S/ECGAna_allSubj_edf_pseudonym.csv';   
 
 % Length of HEPs in seconds
 epoch_length = [-0.2, 0.6]; 

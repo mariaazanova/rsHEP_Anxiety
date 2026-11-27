@@ -4,20 +4,9 @@
 % Load the configuration
 run('config.m');
 
-%% get files
-files = dir(datadir);
-files = files([files.isdir] & ~startsWith({files.name}, '.')); % subject folders only
-
-% restrict to the analysis sample (participants remaining after the exclusion criteria)
-sample = readtable(sample_file, 'Delimiter', ',', 'TextType', 'string');
-sample_ids = unique(strtrim(sample.life_id));
-% folder (= raw file) names are LIFE IDs, but two recordings lack the "LI" prefix
-folder_ids = string({files.name});
-no_prefix = ~startsWith(folder_ids, "LI");
-folder_ids(no_prefix) = "LI" + folder_ids(no_prefix);
-keep = ismember(folder_ids, sample_ids);
-files = files(keep);
-life_ids = folder_ids(keep);  
+%% 20-min resting EDF each
+edf = dir(fullfile(edf_dir, '*.edf'));
+files = struct('name', erase({edf.name}, '.edf'), 'folder', datadir);
 
 %% documentation
 prep_subjects = {};
@@ -28,8 +17,7 @@ for hp = 1:length(hp_settings)
 
         try
             % get subjid
-            subjid = files(i).name;          
-            life_id = char(life_ids(i));     
+            subjid = files(i).name;
             subj_folder = fullfile(files(i).folder, '/', files(i).name, '/');
             eegpath = fullfile(files(i).folder, '/', files(i).name, '/eeg');
             ecgpath = fullfile(files(i).folder, '/', files(i).name, '/ecg');
@@ -49,7 +37,7 @@ for hp = 1:length(hp_settings)
             end
 
             % load raw EEG and ECG
-            [EEG, ECG] = load_life_raw(subjid, raw_dirs, ecg_label, eog_labels, orig_chanlocs);
+            [EEG, ECG] = load_life_raw(subjid, edf_dir, ecg_label, eog_labels, orig_chanlocs);
 
             %backup of ECG for HEPLAB - only downsampling, rest will be
             %done by heplab
@@ -81,19 +69,7 @@ for hp = 1:length(hp_settings)
 %           EEG = pop_eegfilt(EEG, hp_settings(hp), 0, hp_filter_order(hp), 0, 0, 0, 'fir1', 0);
 %           ECG = pop_eegfilt(ECG, hp_settings(hp), 0, hp_filter_order(hp), 0, 0, 0, 'fir1', 0);
 
-            % crop to the resting-state block S99 -> S100 (S99 + rest_duration_min if S100 is missing
-            % without any start marker the whole recording is kept
-            [rest_t0, rest_t1, rest_src] = get_rest_start(EEG, life_id, christian_s99_dirs, rest_duration_min);
-            rest_win = [];
-            if ~isnan(rest_t0)
-                rest_win = [max(rest_t0, 0), min(rest_t1, EEG.pnts / EEG.srate) - 1 / EEG.srate];
-                EEG = pop_select(EEG, 'time', rest_win);
-                ECG = pop_select(ECG, 'time', rest_win);
-                ECG_heplab = pop_select(ECG_heplab, 'time', rest_win);
-            end
-            EEG.etc.rest_block = struct('start_s', rest_t0, 'end_s', rest_t1, 'source', rest_src, 'kept_min', EEG.pnts / EEG.srate / 60, ...
-                                        'win', rest_win);   % [start end] s actually cut; a2 and a9 cut the same window
-            ECG.etc.rest_block = EEG.etc.rest_block;
+            EEG.etc.n_samples = EEG.pnts;   % length of the continuous recording (a10: midpoint for the split half)
 
             % ASR for removal of channels (less than correlation of 0.85 or 5 seconds flat)
             EEG = clean_artifacts(EEG, 'ChannelCriterion', chan_crit, 'FlatlineCriterion', flat_line, 'LineNoiseCriterion', 'off', 'BurstCriterion', 'off', 'WindowCriterion', 'off', 'Highpass', 'off');
@@ -120,7 +96,8 @@ for hp = 1:length(hp_settings)
             % R-peaks (2.3.2): HEPLAB, then aligned to the QRS template, R-peaks in unreliable ECG stretches
             % dropped, extrasystoles marked
             HEP_qrs = heplab_slowdetect(ECG_heplab.data, ECG_heplab.srate);
-            [n_ext_cers, hr_cers] = get_cers_extrasystoles(cers_file, life_id);
+            % CER-S V+S count and heart rate (NaN without a CER-S row -> extrasystole rule runs)
+            [n_ext_cers, hr_cers] = get_cers_extrasystoles(cers_file, subjid);
             [HEP_qrs, is_ext, rpeak_info] = process_rpeaks(ECG_heplab.data, HEP_qrs, ECG_heplab.srate, epoch_length, n_ext_cers, hr_cers, rpeak_params);
             parsave([ecgpath, '/', 'extrasystoles.mat'], rpeak_info);
 
@@ -133,7 +110,7 @@ for hp = 1:length(hp_settings)
              % save events to EEG and ECG set
             EEG = fun_heplab_save_events(EEG, HEP_qrs, hep_event_marker);
             rs = num2cell(HEP_qrs);
-            [EEG.event(end - numel(rs) + 1:end).rpeak_sample] = rs{:};   % R-peak sample in the resting block -> needed for split-half reliability (a10)
+            [EEG.event(end - numel(rs) + 1:end).rpeak_sample] = rs{:};   % R-peak sample in the recording -> needed for split-half reliability (a10)
             ECG = fun_heplab_save_events(ECG, HEP_qrs, hep_event_marker);
             eeg_checkset(EEG);
             eeg_checkset(ECG);
