@@ -4,6 +4,7 @@
 
 % Load configuration & settings
 run('config.m');
+if ~isfolder(cutoff_dir), mkdir(cutoff_dir); end
 
 %get files
 files = dir(datadir);
@@ -13,11 +14,10 @@ for hp = 1:length(hp_settings)
 hp_label = sprintf('hp_%0.1f', hp_settings(hp));
 
 %correlation of ICA components with ECG, per subject
-EEG_ICA_Corr = {};
-subj_ids = {};
+EEG_ICA_Corr = cell(1, length(files));
+subj_ids = cell(1, length(files));
 
-counter = 1;
-for i=1:length(files)
+parfor i=1:length(files)
 
     try
 
@@ -45,9 +45,8 @@ for i=1:length(files)
         [~, cV] = ecg_ica_corr(EEG_ICA, ECG_template, cfa_corr_window, hep_event_marker, 1.5);
 
         %store ECG ICA correlation in matrix and save it
-        EEG_ICA_Corr{counter} = cV;
-        subj_ids{counter} = subjid;
-        counter = counter+1;
+        EEG_ICA_Corr{i} = cV;
+        subj_ids{i} = subjid;
 
         %List of subjects
 
@@ -66,7 +65,12 @@ for i=1:length(files)
 
 end
 
-save([datadir, 'EEG_ICA_Corr_', hp_label, '.mat'], 'EEG_ICA_Corr')
+% keep only subjects that loaded successfully - otherwise threshold computation might fail
+ok = ~cellfun(@isempty, subj_ids);
+EEG_ICA_Corr = EEG_ICA_Corr(ok);
+subj_ids = subj_ids(ok);
+
+save([cutoff_dir, 'EEG_ICA_Corr_', hp_label, '.mat'], 'EEG_ICA_Corr')
 
 % Compute cutoff values for each target number of ICs
 cutoff_values = struct();
@@ -82,12 +86,12 @@ for i = 1:length(target_ICs_removed)
                 
         % Save individual cutoff file
         cutoff_data = cutoff_values.(cutoff_label);
-        save([datadir, 'EEG_ICA_', cutoff_label, '_', hp_label, '.mat'],  'cutoff_data');
+        save([cutoff_dir, 'EEG_ICA_', cutoff_label, '_', hp_label, '.mat'],  'cutoff_data');
     end
 end
 
 % Save all cutoffs and subject IDs in one file
-save([datadir, 'EEG_ICA_cutoffs_', hp_label, '.mat'], 'cutoff_values', 'cutoff_sd');
-save([datadir, 'EEG_ICA_cutoff_subj_ids_', hp_label, '.mat'], 'subj_ids');
+save([cutoff_dir, 'EEG_ICA_cutoffs_', hp_label, '.mat'], 'cutoff_values', 'cutoff_sd');
+save([cutoff_dir, 'EEG_ICA_cutoff_subj_ids_', hp_label, '.mat'], 'subj_ids');
 
 end

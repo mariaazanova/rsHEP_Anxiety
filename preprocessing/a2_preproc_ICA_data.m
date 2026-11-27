@@ -37,7 +37,7 @@ for hp = 1:length(hp_settings)
 
             %% load RAW data - will be filtered at 1 Hz and used for ICA
             % ECG is loaded raw again as the one from a1_preproc_data.m is already high-pass filtered and epoched
-            [EEG_ICA, ECG] = load_life_raw(subjid, raw_dirs, ecg_label, eog_labels, orig_chanlocs);
+            [EEG_ICA, ECG] = load_life_raw(subjid, edf_dir, ecg_label, eog_labels, orig_chanlocs);
 
             %% load preprocessed dataset from subject
             EEG = pop_loadset('filename', prep_id,'filepath', prep_eegpath);

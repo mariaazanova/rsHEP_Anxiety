@@ -8,13 +8,13 @@ addpath(fullfile(fileparts(mfilename('fullpath')), 'functions'))
 orig_chanlocs = '/data/p_02865/tools/eeglab2024.1/plugins/dipfit/standard_BEM/elec/standard_1005.elc';
 
 %% Data paths
-raw_dirs = {'/data/p_02865/data/LIFE/raw/EEG/ruhe/', ...
-            '/data/p_02865/data/LIFE/raw/EEG/esf_data_2014-08-21/', ...
-            '/data/p_02865/data/LIFE/raw/EEG/fehlende_Daten/'};
+edf_dir = '/data/p_02865/data/LIFE/raw/EDF Files 20min Ruhe/';  
 deriv_root = '/data/p_02865/data/LIFE/derivatives/';
 datadir = [deriv_root, 'preprocessing/'];         
 save_error = [deriv_root, 'logs/'];
 derivative_dir = [deriv_root, 'group/'];
+cutoff_dir = [deriv_root, 'ica_cutoffs/'];
+qa_dir = [deriv_root, 'qa/'];
 outdir = [deriv_root, 'output/'];
 
 %ECG and EOG channel labels in the raw data
@@ -32,8 +32,21 @@ pop_editoptions('option_computeica', 1);
 %HEP event marker
 hep_event_marker = '88';
 
+%analysis sample: participants remaining after the exclusion criteria (column life_id)
+sample_file = [deriv_root, 'data_after_exclusion.csv'];
+
 %minimum IBI (sec)
 min_ibi = 0.6;
+
+% R-peak processing after HEPLAB 
+rpeak_params = struct( ...
+    'align_shift_ms', 60, 'align_min_corr', 0.9, ...                  % align markers to the QRS template
+    'win_s', 10, 'min_bsqi', 0.9, 'bsqi_tol_s', 0.1, ...               % agreement between HEPLAB and indepentent peak detector
+    'min_beats', 3, 'flat_rel', 0.05, 'clip_frac', 0.01, ...           % noisy ECG - lost / flat / clipped
+    'max_hr_dev_cers', 0.10, ...                                       % CER-S trusted within this heart-rate deviation
+    'ratio_thr', 0.76, 'corr_thr', 0.84, 'ext_shift_ms', 40, 'gap_thr', 1.6, ...   % extrasystole rule, validated
+    'accept_thr', 0.8, 'ref_win', 10, 'max_rejected', 10);       
+cers_file = '/data/p_02865/data/LIFE/tabular/AMPS_CER-S/ECGAna_allSubj_edf_pseudonym.csv';   
 
 % Length of HEPs in seconds
 epoch_length = [-0.2, 0.6]; 
@@ -66,6 +79,12 @@ baseline = {[-150, -50], []};
 %1.5, 3.5, or no cardiac ICs removed
 ic_cutoffs = [1.5, 3.5, 0, NaN];
 
+% alpha power Welch PSD, 4-s Hanning windows, 50% overlap, mean over 8-12 Hz
+alpha_band = [8, 12];       % Hz
+welch_window_s = 4;         % s
+welch_overlap = 0.5;
+alpha_hp = 2;               % index into hp_settings (0.5 Hz) -> alpha power is computed for one hp-setting only but all ICA levels.
+
 %clean artifacts settings
 
 %correlation with neighbours
@@ -93,6 +112,10 @@ p2p_step_ms = 100;
 
 %exclude participant from a pipeline if fewer epochs remain after rejection 
 min_epochs = 300;
+
+% standard life channel order -> a5 reorders every subject to it to prevent misalignment
+ref_labels = {'Fp1','Fp2','F3','F4','F7','F8','Fz','FC1','FC2','FC5','FC6','C3','C4','T7','T8','Cz','FT9','FT10', ...
+              'CP5','CP6','TP9','TP10','P3','P4','P7','P8','Pz','O1','O2','PO9','PO10'};
 
 %Ignore channels in bad epoch detection due to influence of eye activity
 ignore_channel = {'Fp1', 'Fp2', 'F7', 'F8'};
